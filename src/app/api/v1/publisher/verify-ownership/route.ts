@@ -31,7 +31,12 @@ function detectPublisherInHtml(html: string, publisherId: string): boolean {
     const loosePattern = new RegExp(`data-publisher.{0,30}${escaped}`, 'i');
 
     // Pattern 5: URL-encoded form (e.g. data-publisher%3D%220xABC%22)
-    const urlDecoded = decodeURIComponent(html);
+    let urlDecoded = html;
+    try {
+        urlDecoded = decodeURIComponent(html);
+    } catch (e) {
+        // Ignore malformed URIs in raw HTML
+    }
     const urlPattern = new RegExp(`data-publisher.{0,30}${escaped}`, 'i');
 
     return universalPattern.test(html) || loosePattern.test(html) || urlPattern.test(urlDecoded);
