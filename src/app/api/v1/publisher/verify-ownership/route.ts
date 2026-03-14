@@ -17,9 +17,14 @@ const resolveTxt = promisify(dns.resolveTxt);
  * 6. Farcaster FID (numeric): data-publisher":"1550542"
  * 7. Case-insensitive hex:   0xabc === 0xABC (wallet addresses are case-insensitive)
  */
-function detectPublisherInHtml(html: string, publisherId: string): boolean {
+function detectPublisherInHtml(html: string, publisherId: string | number): boolean {
+    if (!html || !publisherId) return false;
+
+    // Cast parameter to a string in case Next.js body parser retains integer literals (like Farcaster FIDs)
+    const pubStr = String(publisherId).trim();
+
     // Escape any regex special characters in the publisherId
-    const escaped = publisherId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = pubStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     // Pattern 1 & 2 & 3 & 8: covers HTML attr, JSON-serialized formats, and escaped JSON (Next.js AST)
     // Matches: data-publisher="0xABC", data-publisher":"0xABC", data-publisher='0xABC', data-publisher=0xABC
@@ -54,7 +59,11 @@ async function fetchSiteHtml(url: string): Promise<string> {
             headers: { 
                 'User-Agent': 'OpenAds-Verification-Bot/1.0',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             },
+            cache: 'no-store', // CRITICAL: Stop Next.js from aggressively caching this check forever
             redirect: 'follow',
             signal: controller.signal,
         });
