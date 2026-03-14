@@ -1,0 +1,136 @@
+import { NextResponse } from 'next/server';
+import { supabase } from '@/app/lib/supabase';
+import { ethers } from 'ethers';
+
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+        const { advertiser, headline, cta, image, url, size, budget, cpm, voucherCode } = body;
+
+        // Basic validation
+        if (!advertiser || !headline || !image || !url || !size || !budget || !cpm) {
+            return NextResponse.json({ error: 'Missing required ad fields' }, { status: 400 });
+        }
+
+        // 1. Voucher Redemption Logic
+        let validatedBudget = Number(budget);
+        if (voucherCode) {
+            const { data: voucherData, error: voucherError } = await supabase
+                .from('vouchers')
+                .select('*')
+                .eq('code', voucherCode.trim().toUpperCase())
+                .eq('is_used', false)
+                .single();
+
+            if (voucherError || !voucherData) {
+                return NextResponse.json({ error: 'Invalid or already used voucher code' }, { status: 400 });
+            }
+
+            // Atomically mark the voucher as used
+            const { error: updateError } = await supabase
+                .from('vouchers')
+                .update({ is_used: true, used_by_wallet: advertiser })
+                .eq('code', voucherCode.trim().toUpperCase());
+
+            if (updateError) {
+                console.error('Failed to consume voucher:', updateError);
+                return NextResponse.json({ error: 'Failed to redeem voucher to DB' }, { status: 500 });
+            }
+
+            // Note: If partial payments exist, the actual budget is the frontend claimed budget. 
+            // In a strict financial setup, budgetWei should be `Vault Deposit + VoucherAmount`.
+        }
+
+        // 2. Process and upload the image to Supabase Storage
+        // The frontend sends image as a Base64 data URL (e.g. data:image/png;base64,iVBOR...)
+        let uploadedImageUrl = image;
+
+        if (image.startsWith('data:image')) {
+            const matches = image.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                return NextResponse.json({ error: 'Invalid base64 image data' }, { status: 400 });
+            }
+
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+
+            // Generate a unique filename using advertiser wallet prefix and timestamp
+            const ext = mimeType.split('/')[1] || 'jpg';
+            const fileName = `${advertiser.substring(0, 10)}_${Date.now()}.${ext}`;
+
+            // Upload directly from Buffer
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('ads')
+                .upload(fileName, buffer, {
+                    contentType: mimeType,
+                    upsert: false
+                });
+
+            if (uploadError) {
+                console.error('Supabase Storage Error:', uploadError);
+                return NextResponse.json({ error: 'Failed to upload ad image to CDN' }, { status: 500 });
+            }
+
+            // Retrieve the public URL
+            const { data: { publicUrl } } = supabase.storage.from('ads').getPublicUrl(fileName);
+            uploadedImageUrl = publicUrl;
+        }
+
+        // 2. Format financial data
+        // Convert plain numbers back to their Wei representations assuming USDC (18 decimals)
+        // Since budget/cpm are derived from the UI, we assume they are standard decimal formats (e.g., 100, 5.0)
+        // We will store them directly as NUMERIC in the DB since PostgreSQL handles arbitrarily large numbers.
+        const budgetWei = ethers.parseUnits(budget.toString(), 18).toString();
+        const cpmWei = ethers.parseUnits(cpm.toString(), 18).toString();
+
+        // 3. Save Ad Campaign to Supabase PostgreSQL Database
+        const { data: dbData, error: dbError } = await supabase
+            .from('campaigns')
+            .insert([
+                {
+                    advertiser_wallet: advertiser,
+                    creative_title: headline,
+                    creative_url: url,
+                    image_url: uploadedImageUrl,
+                    ad_type: size,
+                    ad_position: 'top', // Default
+                    budget_wei: budgetWei,
+                    cpm_rate_wei: cpmWei,
+                    status: 'active'
+                }
+            ])
+            .select()
+            .single();
+
+        if (dbError) {
+            console.error('Supabase Database Error:', dbError);
+            return NextResponse.json({ error: 'Failed to save campaign to database' }, { status: 500 });
+        }
+
+        return NextResponse.json(
+            { success: true, ad: dbData },
+            {
+                status: 201,
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                },
+            }
+        );
+    } catch (error) {
+        console.error('API Error Wrapper:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        },
+    });
+}

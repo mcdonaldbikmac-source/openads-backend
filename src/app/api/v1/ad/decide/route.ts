@@ -1,0 +1,131 @@
+import { NextResponse } from 'next/server';
+import { supabase } from '@/app/lib/supabase';
+import { ethers } from 'ethers';
+
+export async function GET(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const placementId = searchParams.get('placement');
+        const position = searchParams.get('position') || 'all'; // Default to 'all' if not provided
+
+        if (!placementId) {
+            return NextResponse.json({ error: 'Missing placement ID' }, { status: 400 });
+        }
+
+        // 1. Query Supabase for eligible campaigns
+        // Must be active and have scheduled_start <= now (or null)
+        // CRITICAL: We DO NOT select 'image_url' here to avoid memory bloat from thousands of Base64 strings.
+        const { data: campaigns, error } = await supabase
+            .from('campaigns')
+            .select('id, status, ad_type, scheduled_start, budget_wei, spend_wei, cpm_rate_wei, creative_title, creative_url')
+            .eq('status', 'active');
+
+        if (error) {
+            console.error('Supabase Query Error:', error);
+            return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
+        }
+
+        if (!campaigns || campaigns.length === 0) {
+            return NextResponse.json({ error: 'No active campaigns available' }, { status: 404 });
+        }
+
+        // 1.5 Filter by requested position (Ad Format Matching)
+        let filteredByPosition = campaigns;
+        if (position !== 'all') {
+            filteredByPosition = campaigns.filter(camp => {
+                if (position === 'top' || position === 'bottom') return camp.ad_type === '320x50';
+                if (position === 'popup') return camp.ad_type === '300x250';
+                if (position === 'floating') return camp.ad_type === '64x64';
+                return true;
+            });
+        }
+
+        if (filteredByPosition.length === 0) {
+            return NextResponse.json({ error: 'No active campaigns matching requested position' }, { status: 404 });
+        }
+
+        const now = new Date();
+
+        // 2. Filter campaigns: Must have budget remaining and be past scheduled start time
+        const eligibleCampaigns = filteredByPosition.filter(camp => {
+            const hasStarted = !camp.scheduled_start || new Date(camp.scheduled_start) <= now;
+
+            // BigInt calculation for wei
+            const budget = BigInt(camp.budget_wei || 0);
+            const spend = BigInt(camp.spend_wei || 0);
+            const cpm = BigInt(camp.cpm_rate_wei || 0);
+
+            // Allow if remaining budget is greater than or equal to 1 impression cost
+            // 1 impression cost = cpm / 1000
+            const costPerImpression = cpm / BigInt(1000);
+            const remainingBudget = budget - spend;
+
+            return hasStarted && remainingBudget >= costPerImpression;
+        });
+
+        if (eligibleCampaigns.length === 0) {
+            return NextResponse.json({ error: 'All campaigns exhausted' }, { status: 404 });
+        }
+
+        // 3. Select the highest bidding campaign (eCPM Allocation Algorithm)
+        // Sort by cpm_rate_wei descending
+        eligibleCampaigns.sort((a, b) => {
+            const cpmA = BigInt(a.cpm_rate_wei || 0);
+            const cpmB = BigInt(b.cpm_rate_wei || 0);
+            if (cpmA > cpmB) return -1;
+            if (cpmA < cpmB) return 1;
+            return 0;
+        });
+
+        // The first element is now the highest bidder
+        let selectedCampaign = eligibleCampaigns[0];
+
+        // 4. Fetch the heavy Base64 image ONLY for the winning campaign
+        const { data: imageRow, error: imageError } = await supabase
+            .from('campaigns')
+            .select('image_url')
+            .eq('id', selectedCampaign.id)
+            .single();
+
+        if (imageError || !imageRow) {
+            console.error('Failed to fetch image for winning campaign:', imageError);
+            return NextResponse.json({ error: 'Failed to fetch ad creative' }, { status: 500 });
+        }
+
+        // Format the response to match the SDK's expected structure
+        const formattedAd = {
+            id: selectedCampaign.id,
+            headline: selectedCampaign.creative_title,
+            cta: 'View Offer', // Could make this dynamic later
+            image: imageRow.image_url,
+            url: selectedCampaign.creative_url,
+            cpc: ethers.formatUnits(selectedCampaign.cpm_rate_wei.toString(), 18), // Frontend expects a readable number
+            size: selectedCampaign.ad_type
+        };
+
+        // CORS Headers are essential since the SDK will fetch this from external Mini App domains
+        return NextResponse.json(
+            { ad: formattedAd },
+            {
+                status: 200,
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                },
+            }
+        );
+    } catch (err) {
+        console.error('Decide API Error:', err);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        },
+    });
+}

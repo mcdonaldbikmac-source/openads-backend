@@ -1,0 +1,2 @@
+[2026-03-14] backend: upgraded verifyOwnership to handle Next.js client component JSON payloads during SSR
+Resolution: Fixed
