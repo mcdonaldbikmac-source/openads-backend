@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
         // Verification failed
         return NextResponse.json(
-            { success: false, error: 'Verification code not found. Please ensure the meta tag or DNS record is added exactly as instructed.' },
+            { success: false, error: 'SDK tag not found. Please ensure the OpenAds <script> tag is added exactly as instructed in your HTML source code.' },
             { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
         );
 
