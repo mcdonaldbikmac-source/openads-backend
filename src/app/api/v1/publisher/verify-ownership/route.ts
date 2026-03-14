@@ -114,6 +114,15 @@ export async function POST(request: Request) {
 
         // 2. Perform Verification based on method
         if (verification_method === 'script' || verification_method === 'farcaster_fid') {
+            
+            // Explicit check to prevent users from using the Farcaster Frame URL
+            if (domain_url.includes('farcaster.xyz/miniapps/')) {
+                return NextResponse.json(
+                    { error: 'Cannot verify the Farcaster Wrapper link. Please register the actual underlying web domain of your Mini-App (e.g. your vercel.app link) where the SDK is injected.' },
+                    { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+                );
+            }
+
             // Both website and Farcaster Mini-App verification work identically:
             // fetch the raw HTML response and use detectPublisherInHtml() which
             // covers plain HTML, Next.js/Nuxt/SvelteKit/Angular/Astro SSR payloads,
