@@ -12,6 +12,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required ad fields' }, { status: 400 });
         }
 
+        // XSS & Security Validation for the Destination URL
+        try {
+            const parsedUrl = new URL(url);
+            const scheme = parsedUrl.protocol.toLowerCase();
+            if (['javascript:', 'vbscript:', 'data:', 'file:'].includes(scheme)) {
+                console.warn(`[Security] Blocked malicious URL scheme attempted by ${advertiser}: ${url}`);
+                return NextResponse.json({ error: 'Malicious URL scheme provided' }, { status: 400 });
+            }
+        } catch (e) {
+            return NextResponse.json({ error: 'Invalid URL format provided' }, { status: 400 });
+        }
+
         // 1. Voucher Redemption Logic
         let validatedBudget = Number(budget);
         if (voucherCode) {
