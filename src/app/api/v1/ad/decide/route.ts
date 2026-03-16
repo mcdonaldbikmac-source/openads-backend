@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
 
-export const revalidate = 30;
+export const revalidate = 60;
 
 export async function GET(request: Request) {
     try {
