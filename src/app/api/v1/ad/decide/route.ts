@@ -33,9 +33,10 @@ export async function GET(request: Request) {
         let filteredByPosition = campaigns;
         if (position !== 'all') {
             filteredByPosition = campaigns.filter(camp => {
-                if (position === 'top' || position === 'bottom') return camp.ad_type === '320x50';
-                if (position === 'popup') return camp.ad_type === '300x250';
-                if (position === 'floating') return camp.ad_type === '64x64';
+                const types = camp.ad_type || '';
+                if (position === 'top' || position === 'bottom') return types.includes('320x50');
+                if (position === 'popup') return types.includes('300x250');
+                if (position === 'floating') return types.includes('64x64');
                 return true;
             });
         }
@@ -99,7 +100,7 @@ export async function GET(request: Request) {
             cta: 'View Offer', // Could make this dynamic later
             image: imageRow.image_url,
             url: selectedCampaign.creative_url,
-            cpc: ethers.formatUnits(selectedCampaign.cpm_rate_wei.toString(), 18), // Frontend expects a readable number
+            cpc: ethers.formatUnits(selectedCampaign.cpm_rate_wei.toString(), 6), // 6 decimals for USDC
             size: selectedCampaign.ad_type
         };
 

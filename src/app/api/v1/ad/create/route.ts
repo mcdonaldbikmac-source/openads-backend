@@ -53,12 +53,22 @@ export async function POST(request: Request) {
             // In a strict financial setup, budgetWei should be `Vault Deposit + VoucherAmount`.
         }
 
-        // 2. Process and upload the image to Supabase Storage
-        // The frontend sends image as a Base64 data URL (e.g. data:image/png;base64,iVBOR...)
         let uploadedImageUrl = image;
+        
+        // The frontend sends image as a JSON string (e.g. {"320x50":"data:image/png;base64,..."})
+        let base64ImageToUpload = image;
+        try {
+            const parsedImages = JSON.parse(image);
+            const formats = Object.keys(parsedImages);
+            if (formats.length > 0) {
+                base64ImageToUpload = parsedImages[formats[0]]; // Take the first available cropped image
+            }
+        } catch (e) {
+            // It's not a JSON string, assume it's a raw base64 string from an older version
+        }
 
-        if (image.startsWith('data:image')) {
-            const matches = image.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+        if (base64ImageToUpload && base64ImageToUpload.startsWith('data:image')) {
+            const matches = base64ImageToUpload.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
             if (!matches || matches.length !== 3) {
                 return NextResponse.json({ error: 'Invalid base64 image data' }, { status: 400 });
             }
@@ -90,11 +100,11 @@ export async function POST(request: Request) {
         }
 
         // 2. Format financial data
-        // Convert plain numbers back to their Wei representations assuming USDC (18 decimals)
+        // Convert plain numbers back to their Wei representations assuming USDC (6 decimals on Base)
         // Since budget/cpm are derived from the UI, we assume they are standard decimal formats (e.g., 100, 5.0)
         // We will store them directly as NUMERIC in the DB since PostgreSQL handles arbitrarily large numbers.
-        const budgetWei = ethers.parseUnits(budget.toString(), 18).toString();
-        const cpmWei = ethers.parseUnits(cpm.toString(), 18).toString();
+        const budgetWei = ethers.parseUnits(budget.toString(), 6).toString();
+        const cpmWei = ethers.parseUnits(cpm.toString(), 6).toString();
 
         // 3. Save Ad Campaign to Supabase PostgreSQL Database
         const { data: dbData, error: dbError } = await supabase
