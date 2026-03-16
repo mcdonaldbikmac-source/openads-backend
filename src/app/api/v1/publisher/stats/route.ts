@@ -75,9 +75,9 @@ export async function GET(request: Request) {
             {
                 success: true,
                 stats: {
-                    totalEarnedUSD: Number(ethers.formatUnits(totalEarnedWei.toString(), 18)).toFixed(4),
-                    pendingUSD: Number(ethers.formatUnits(pendingWei.toString(), 18)).toFixed(4),
-                    paidOutUSD: Number(ethers.formatUnits(paidOutWei.toString(), 18)).toFixed(4),
+                    totalEarnedUSD: Number(ethers.formatUnits(totalEarnedWei.toString(), 6)).toFixed(4),
+                    pendingUSD: Number(ethers.formatUnits(pendingWei.toString(), 6)).toFixed(4),
+                    paidOutUSD: Number(ethers.formatUnits(paidOutWei.toString(), 6)).toFixed(4),
                     impressions: viewCount || 0,
                     clicks: clickCount || 0,
                     lastImpression: viewData && viewData.length > 0 ? viewData[0].created_at : null,
