@@ -32,9 +32,9 @@ export async function GET(request: Request) {
             ad_type: camp.ad_type,
             impressions: camp.impressions,
             status: camp.status,
-            budget_usd: Number(ethers.formatUnits(String(camp.budget_wei || '0').split('.')[0], 18)).toFixed(2),
-            spend_usd: Number(ethers.formatUnits(String(camp.spend_wei || '0').split('.')[0], 18)).toFixed(4),
-            cpm_usd: Number(ethers.formatUnits(String(camp.cpm_rate_wei || '0').split('.')[0], 18)).toFixed(2),
+            budget_usd: Number(ethers.formatUnits(String(camp.budget_wei || '0').split('.')[0], 6)).toFixed(2),
+            spend_usd: Number(ethers.formatUnits(String(camp.spend_wei || '0').split('.')[0], 6)).toFixed(4),
+            cpm_usd: Number(ethers.formatUnits(String(camp.cpm_rate_wei || '0').split('.')[0], 6)).toFixed(2),
             created_at: camp.created_at
         }));
 
