@@ -18,34 +18,20 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required tracking parameters' }, { status: 400 });
         }
 
-        let isAuthenticated = false;
+        if (!message || !nonce) {
+            return NextResponse.json({ error: 'Missing SIWF payload (message, nonce)' }, { status: 400 });
+        }
 
-        if (sig === 'WEB_TESTING_BYPASS') {
-            // TEMPORARY PROTOTYPE BYPASS: Allow normal web browser testing without SIWF
-            isAuthenticated = true;
-            console.warn(`[OpenAds Backend API] ⚠️ Web Testing Bypass matched. Allowing anonymous web impression/click.`);
-        } else {
-            // Allow tracking payload even without nonce for MVP prototype testing phase
-            if (!message) {
-                return NextResponse.json({ error: 'Missing signature payload (message)' }, { status: 400 });
-            }
+        const verifyResponse = await appClient.verifySignInMessage({
+            message,
+            signature: sig,
+            domain: 'openads.xyz',
+            nonce
+        });
 
-            try {
-                const verifyResponse = await appClient.verifySignInMessage({
-                    message,
-                    signature: sig,
-                    domain: 'openads.xyz',
-                    nonce: nonce || 'openads_nonce'
-                });
-
-                if (!verifyResponse.success || verifyResponse.fid !== Number(fid)) {
-                    console.warn(`[OpenAds Backend API] ⚠️ Farcaster Auth Failed (${verifyResponse.error}). Falling back to prototype open validation.`);
-                }
-            } catch(e) {
-                 console.warn(`[OpenAds Backend API] ⚠️ Farcaster viem verification crashed. Falling back to prototype open validation.`);
-            }
-
-            isAuthenticated = true; // MVP Bypass unlocked for Farcaster Frame testing
+        if (!verifyResponse.success || verifyResponse.fid !== Number(fid)) {
+            console.error('Farcaster Auth Failed:', verifyResponse.error);
+            return NextResponse.json({ error: 'Invalid Farcaster Viewer Signature' }, { status: 401 });
         }
 
         console.log(`[OpenAds Backend API] 🛡️ Verified Live Farcaster Hit: User ${fid} fired ${event} on ad ${ad.id}`);
@@ -86,12 +72,12 @@ export async function POST(request: Request) {
                  if (domainCheck && domainCheck.is_verified) {
                      isValidDomain = true;
                  } else {
-                     console.warn(`[OpenAds Security] ⚠️ Unverified domain ${requestDomain} attempting tracking for wallet ${publisherWallet}. Allowing for prototype testing phase.`);
-                     isValidDomain = true; // Temporarily unlocked for testing without strict domain matching
+                     console.warn(`[OpenAds Security] 🚨 Unauthorized domain ${requestDomain} attempting to claim revenue for wallet ${publisherWallet}. Impression dropped.`);
+                     return NextResponse.json({ error: 'Origin domain is not verified for this publisher wallet.' }, { status: 403 });
                  }
              } catch (e) {
-                 console.warn(`[OpenAds Security] ⚠️ Invalid origin header. Allowing for prototype testing phase.`);
-                 isValidDomain = true; // Temporarily unlocked
+                 // Invalid origin header
+                 return NextResponse.json({ error: 'Invalid origin header.' }, { status: 403 });
              }
         } else {
             isValidDomain = true;
