@@ -23,20 +23,39 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Database error fetching campaigns' }, { status: 500 });
         }
 
-        // Format BigInts to Strings for the frontend
-        const formattedCampaigns = campaigns.map(camp => ({
-            id: camp.id,
-            headline: camp.creative_title,
-            image_url: camp.image_url,
-            url: camp.creative_url,
-            ad_type: camp.ad_type,
-            impressions: camp.impressions || 0,
-            clicks: camp.clicks || 0,
-            status: camp.status,
-            budget_usd: Number(ethers.formatUnits(String(camp.budget_wei || '0').split('.')[0], 6)).toFixed(2),
-            spend_usd: Number(ethers.formatUnits(String(camp.spend_wei || '0').split('.')[0], 6)).toFixed(4),
-            cpm_usd: Number(ethers.formatUnits(String(camp.cpm_rate_wei || '0').split('.')[0], 6)).toFixed(2),
-            created_at: camp.created_at
+        // Format BigInts to Strings for the frontend and stitch in real tracking counts
+        const formattedCampaigns = await Promise.all(campaigns.map(async (camp) => {
+            // Count actual Clicks from tracking_events (clicks column does not exist on campaigns table)
+            const { count: clicksCount } = await supabase
+                .from('tracking_events')
+                .select('*', { count: 'exact', head: true })
+                .eq('campaign_id', camp.id)
+                .eq('event_type', 'click');
+
+            // Optionally, also count Views natively just to ensure 100% accuracy if RPC failed
+            const { count: viewsCount } = await supabase
+                .from('tracking_events')
+                .select('*', { count: 'exact', head: true })
+                .eq('campaign_id', camp.id)
+                .eq('event_type', 'view');
+
+            const finalImpressions = viewsCount || camp.impressions || 0;
+            const finalClicks = clicksCount || 0;
+
+            return {
+                id: camp.id,
+                headline: camp.creative_title,
+                image_url: camp.image_url,
+                url: camp.creative_url,
+                ad_type: camp.ad_type,
+                impressions: finalImpressions,
+                clicks: finalClicks,
+                status: camp.status,
+                budget_usd: Number(ethers.formatUnits(String(camp.budget_wei || '0').split('.')[0], 6)).toFixed(2),
+                spend_usd: Number(ethers.formatUnits(String(camp.spend_wei || '0').split('.')[0], 6)).toFixed(4),
+                cpm_usd: Number(ethers.formatUnits(String(camp.cpm_rate_wei || '0').split('.')[0], 6)).toFixed(2),
+                created_at: camp.created_at
+            };
         }));
 
         return NextResponse.json(
