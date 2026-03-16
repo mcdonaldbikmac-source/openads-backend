@@ -17,24 +17,9 @@ export async function POST(request: Request) {
         }
 
         if (client_type === 'farcaster') {
-            if (!sig || !message || !nonce || !fid) {
-                return NextResponse.json({ error: 'Missing strict Farcaster SIWF cryptographic payload' }, { status: 400 });
-            }
-
-            const verifyResponse = await appClient.verifySignInMessage({
-                message,
-                signature: sig,
-                domain: 'openads.xyz',
-                nonce
-            });
-
-            if (!verifyResponse.success || verifyResponse.fid !== Number(fid)) {
-                console.error('Farcaster Auth Failed:', verifyResponse.error);
-                return NextResponse.json({ error: 'Invalid Farcaster Viewer Signature' }, { status: 401 });
-            }
-            console.log(`[OpenAds Backend API] 🛡️ Verified Farcaster SIWF Hit: User ${fid} fired ${event} on ad ${ad.id}`);
+            console.log(`[OpenAds Backend API] 📱 Farcaster Mini App Traffic Detected: Extracting FID ${fid} for ad ${ad.id}`);
         } else if (client_type === 'web') {
-            console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected: Enforcing Domain Origin Verification for ad ${ad.id}`);
+            console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected: Processing ad ${ad.id}`);
         } else {
             return NextResponse.json({ error: 'Invalid client authentication channel' }, { status: 400 });
         }
@@ -56,11 +41,18 @@ export async function POST(request: Request) {
         // =========================================================================
         // FEATURE: Zero-Admin Web2 Domain Protection (Fraud Prevention)
         // Verify that the request came from a verified domain owned by this publisher.
+        // This is strictly enforced for ALL traffic to block spoofing.
         // =========================================================================
         const originHeader = request.headers.get('origin') || request.headers.get('referer');
         let isValidDomain = false;
 
-        if (originHeader && publisherWallet !== '0x1111222233334444555566667777888899990000') {
+        // Skip check for default system testing publisher
+        if (publisherWallet !== '0x1111222233334444555566667777888899990000') {
+             if (!originHeader) {
+                 console.warn(`[OpenAds Security] 🚨 Missing origin header on production traffic. Impression dropped.`);
+                 return NextResponse.json({ error: 'Strict origin header required for tracking traffic.' }, { status: 403 });
+             }
+
              try {
                  const urlOpt = new URL(originHeader);
                  const requestDomain = urlOpt.origin;
@@ -74,21 +66,15 @@ export async function POST(request: Request) {
 
                  if (domainCheck && domainCheck.is_verified) {
                      isValidDomain = true;
-                     console.log(`[OpenAds Security] 🔒 Origin ${requestDomain} verified for wallet ${publisherWallet}.`);
+                     console.log(`[OpenAds Security] 🔒 Strict Origin ${requestDomain} verified for wallet ${publisherWallet}.`);
                  } else {
                      console.warn(`[OpenAds Security] 🚨 Unauthorized domain ${requestDomain} attempting to claim revenue for wallet ${publisherWallet}. Impression dropped.`);
                      return NextResponse.json({ error: 'Origin domain is not verified for this publisher wallet.' }, { status: 403 });
                  }
              } catch (e) {
-                 // Invalid origin header
                  return NextResponse.json({ error: 'Invalid origin header.' }, { status: 403 });
              }
         } else {
-            // If it is Web Traffic, there MUST be an origin header. Server bots lacking origin are blocked here.
-            if (client_type === 'web' && publisherWallet !== '0x1111222233334444555566667777888899990000') {
-                console.warn(`[OpenAds Security] 🚨 Missing origin header on Web traffic. Impression dropped.`);
-                return NextResponse.json({ error: 'Strict origin header required for unauthenticated web traffic.' }, { status: 403 });
-            }
             isValidDomain = true;
         }
 
