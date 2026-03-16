@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
