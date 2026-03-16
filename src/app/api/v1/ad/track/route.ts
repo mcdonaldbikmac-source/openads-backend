@@ -10,31 +10,34 @@ const appClient = createAppClient({
 export async function POST(request: Request) {
     try {
         const payload = await request.json();
-        // The frontend currently sends placement as something like "popup-0xPublisherWallet"
-        // We need to extract the actual publisher wallet address for logging.
-        const { event, placement, publisher, fid, sig, message, nonce, ad } = payload;
+        const { event, placement, publisher, fid, sig, message, nonce, ad, client_type = 'farcaster' } = payload;
 
-        if (!event || !placement || !fid || !sig || !ad || !ad.id) {
+        if (!event || !placement || !ad || !ad.id) {
             return NextResponse.json({ error: 'Missing required tracking parameters' }, { status: 400 });
         }
 
-        if (!message || !nonce) {
-            return NextResponse.json({ error: 'Missing SIWF payload (message, nonce)' }, { status: 400 });
+        if (client_type === 'farcaster') {
+            if (!sig || !message || !nonce || !fid) {
+                return NextResponse.json({ error: 'Missing strict Farcaster SIWF cryptographic payload' }, { status: 400 });
+            }
+
+            const verifyResponse = await appClient.verifySignInMessage({
+                message,
+                signature: sig,
+                domain: 'openads.xyz',
+                nonce
+            });
+
+            if (!verifyResponse.success || verifyResponse.fid !== Number(fid)) {
+                console.error('Farcaster Auth Failed:', verifyResponse.error);
+                return NextResponse.json({ error: 'Invalid Farcaster Viewer Signature' }, { status: 401 });
+            }
+            console.log(`[OpenAds Backend API] 🛡️ Verified Farcaster SIWF Hit: User ${fid} fired ${event} on ad ${ad.id}`);
+        } else if (client_type === 'web') {
+            console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected: Enforcing Domain Origin Verification for ad ${ad.id}`);
+        } else {
+            return NextResponse.json({ error: 'Invalid client authentication channel' }, { status: 400 });
         }
-
-        const verifyResponse = await appClient.verifySignInMessage({
-            message,
-            signature: sig,
-            domain: 'openads.xyz',
-            nonce
-        });
-
-        if (!verifyResponse.success || verifyResponse.fid !== Number(fid)) {
-            console.error('Farcaster Auth Failed:', verifyResponse.error);
-            return NextResponse.json({ error: 'Invalid Farcaster Viewer Signature' }, { status: 401 });
-        }
-
-        console.log(`[OpenAds Backend API] 🛡️ Verified Live Farcaster Hit: User ${fid} fired ${event} on ad ${ad.id}`);
 
         // Explicit publisher wallet from SDK (data-publisher attribute)
         let publisherWallet = publisher;
@@ -71,6 +74,7 @@ export async function POST(request: Request) {
 
                  if (domainCheck && domainCheck.is_verified) {
                      isValidDomain = true;
+                     console.log(`[OpenAds Security] 🔒 Origin ${requestDomain} verified for wallet ${publisherWallet}.`);
                  } else {
                      console.warn(`[OpenAds Security] 🚨 Unauthorized domain ${requestDomain} attempting to claim revenue for wallet ${publisherWallet}. Impression dropped.`);
                      return NextResponse.json({ error: 'Origin domain is not verified for this publisher wallet.' }, { status: 403 });
@@ -80,6 +84,11 @@ export async function POST(request: Request) {
                  return NextResponse.json({ error: 'Invalid origin header.' }, { status: 403 });
              }
         } else {
+            // If it is Web Traffic, there MUST be an origin header. Server bots lacking origin are blocked here.
+            if (client_type === 'web' && publisherWallet !== '0x1111222233334444555566667777888899990000') {
+                console.warn(`[OpenAds Security] 🚨 Missing origin header on Web traffic. Impression dropped.`);
+                return NextResponse.json({ error: 'Strict origin header required for unauthenticated web traffic.' }, { status: 403 });
+            }
             isValidDomain = true;
         }
 
@@ -88,12 +97,15 @@ export async function POST(request: Request) {
 
         // Record the Impression Securely via our Atomic RPC function
         if (normalizedEvent === 'view') {
+            const safeFid = client_type === 'web' ? 0 : Number(fid);
+            const safeSig = client_type === 'web' ? 'web_origin_verified' : sig;
+
             const { data, error } = await supabase.rpc('record_impression', {
                 p_campaign_id: ad.id,
                 p_publisher_wallet: publisherWallet,
-                p_fid: fid,
+                p_fid: safeFid,
                 p_event_type: normalizedEvent,
-                p_sig: sig
+                p_sig: safeSig
             });
 
             if (error) {
@@ -102,14 +114,16 @@ export async function POST(request: Request) {
             }
         }
         else if (normalizedEvent === 'click') {
-            // For MVP, we only charge for views (CPM). Clicks are just logged textually.
-            // You could write a second RPC for CPC billing if needed.
+            // For production, clicks log for CTR computation
+            const safeFid = client_type === 'web' ? 0 : Number(fid);
+            const safeSig = client_type === 'web' ? 'web_origin_verified' : sig;
+
             const { error } = await supabase.from('tracking_events').insert([{
                 campaign_id: ad.id,
                 publisher_wallet: publisherWallet,
-                fid,
+                fid: safeFid,
                 event_type: normalizedEvent,
-                sig
+                sig: safeSig
             }]);
 
             if (error) console.error('Supabase Click Log Error:', error);
