@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         }
 
         const payload = await request.json();
-        const { event, placement, publisher, fid, sig, message, nonce, ad, client_type = 'farcaster' } = payload;
+        const { event, placement, publisher, fid, sig, message, nonce, ad, client_type = 'farcaster', logo } = payload;
 
         if (!event || !placement || !ad || !ad.id) {
             return NextResponse.json({ error: 'Missing required tracking parameters' }, { status: 400 });
@@ -105,6 +105,18 @@ export async function POST(request: Request) {
 
             if (error) console.error('Supabase Click Log Error:', error.message || error);
         }
+
+        // Background task: Update publisher app logo dynamically (Fire and forget)
+        if (logo && publisherWallet && typeof logo === 'string' && logo.startsWith('http')) {
+            supabase.from('apps')
+                .update({ logo_url: logo })
+                .eq('publisher_wallet', publisherWallet)
+                .is('logo_url', null)
+                .then(({ error }) => {
+                    if (error) console.error('[Tracking API] Failed to update logo:', error.message);
+                });
+        }
+
 
         return NextResponse.json(
             { success: true, verifiedFid: fid, loggedEvent: event },

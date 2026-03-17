@@ -70,6 +70,7 @@ function AdFrameContent() {
                                     placement: placementId,
                                     publisher: publisherWallet,
                                     fid,
+                                    logo: searchParams.get('logo') || '',
                                     sig: 'verified_origin',
                                     message: `impression:${placementId}:${publisherWallet}`
                                 })

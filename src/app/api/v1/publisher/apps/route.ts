@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
         const { data: apps, error } = await supabase
             .from('apps')
-            .select('id, name, domain, created_at')
+            .select('id, name, domain, created_at, logo_url')
             .eq('publisher_wallet', wallet)
             .order('created_at', { ascending: false });
 
