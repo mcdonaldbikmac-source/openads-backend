@@ -4,10 +4,10 @@ import { supabase } from '@/app/lib/supabase';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { campaign_id, url, image } = body;
+        const { campaign_id, url, image, title } = body;
 
-        if (!campaign_id || !url || !image) {
-            return NextResponse.json({ error: 'Missing required parameters (campaign_id, url, image)' }, { status: 400 });
+        if (!campaign_id || !url || !image || !title) {
+            return NextResponse.json({ error: 'Missing required parameters (campaign_id, url, image, title)' }, { status: 400 });
         }
 
         let uploadedImageUrl = image;
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
         const { error } = await supabase
             .from('campaigns')
-            .update({ creative_url: url, image_url: uploadedImageUrl })
+            .update({ creative_title: title, creative_url: url, image_url: uploadedImageUrl })
             .eq('id', campaign_id);
 
         if (error) {
