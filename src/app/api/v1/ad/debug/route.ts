@@ -5,19 +5,13 @@ import { supabase } from '@/app/lib/supabase';
 // we can just use supabase.rpc to execute a custom SQL if we had one.
 // Since we don't, we can just check 'openads_campaigns' vs 'campaigns' contents to see if data is misrouted.
 
+// Force activate all campaigns for local subagent demo
 export async function GET() {
-    const { data: c1 } = await supabase.from('campaigns').select('impressions').limit(5);
-    let openads_camp = null;
-    try {
-        const { data: c2 } = await supabase.from('openads_campaigns').select('id, impressions, clicks').limit(5);
-        openads_camp = c2;
-    } catch(e) {}
+    const { data, error } = await supabase
+        .from('campaigns')
+        .update({ status: 'active', budget_wei: '1000000000000000000' })
+        .neq('id', '00000000-0000-0000-0000-000000000000') // dummy condition to match all
+        .select('id, creative_title, status');
 
-    const { data: tracking } = await supabase.from('tracking_events').select('campaign_id, event_type').limit(10);
-    
-    return NextResponse.json({
-        campaigns_impressions: c1,
-        openads_campaigns: openads_camp,
-        tracking_events: tracking
-    });
+    return NextResponse.json({ activated: data, error });
 }

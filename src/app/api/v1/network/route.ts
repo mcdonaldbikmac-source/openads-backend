@@ -4,18 +4,21 @@ import { supabase } from '@/app/lib/supabase';
 export async function GET() {
     try {
         const { data, error } = await supabase
-            .from('openads_publishers')
-            .select('app_name, domain_url, app_logo_url')
-            .eq('is_verified', true)
-            .order('created_at', { ascending: false });
+            .from('publishers')
+            .select('wallet')
+            .order('created_at', { ascending: false })
+            .limit(10); // Limit to top 10 recent publishers for the marquee
 
         if (error) throw error;
 
         // Map to a simpler format for the landing page marquee
-        const publishers = (data || []).map(pub => ({
-            name: pub.app_name || pub.domain_url,
-            icon: pub.app_logo_url || 'https://cdn.worldvectorlogo.com/logos/globe-3.svg'
-        }));
+        const publishers = (data || []).map(pub => {
+            const shortWallet = pub.wallet ? `${pub.wallet.slice(0, 6)}...${pub.wallet.slice(-4)}` : 'Unknown';
+            return {
+                name: `Publisher ${shortWallet}`,
+                icon: 'https://cdn.worldvectorlogo.com/logos/base-2.svg' // Using Base network logo as default icon instead of globe
+            };
+        });
 
         return NextResponse.json(
             { success: true, publishers },

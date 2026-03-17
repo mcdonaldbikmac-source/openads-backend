@@ -10,12 +10,12 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Missing wallet parameter' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // Query registered apps to see if the publisher has successfully verified any domain
+        // For SDK connection status, we can check if the publisher exists in the new 'publishers' table
+        // or just return 'active' if we recently received an event from them.
         const { data, error } = await supabase
-            .from('openads_publishers')
-            .select('id, is_verified')
-            .eq('wallet_address', wallet)
-            .eq('is_verified', true)
+            .from('publishers')
+            .select('wallet')
+            .eq('wallet', wallet)
             .limit(1);
 
         if (error) {
