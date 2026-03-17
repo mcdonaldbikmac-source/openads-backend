@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 
 import { createAppClient, viemConnector } from '@farcaster/auth-client';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
+// Create a new ratelimiter, that allows 5 requests per 5 seconds
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(5, '5 s'),
+  analytics: true,
+});
 
 const appClient = createAppClient({
     ethereum: viemConnector(),
@@ -9,6 +18,22 @@ const appClient = createAppClient({
 
 export async function POST(request: Request) {
     try {
+        // =========================================================================
+        // FEATURE: Rate Limiting (Upstash Redis)
+        // Prevent DDoS, Bot Farms, and API Replay Attacks to protect advertiser budgets.
+        // =========================================================================
+        const ip = request.headers.get('x-forwarded-for') || 'anonymous-ip';
+        try {
+            const { success } = await ratelimit.limit(`ratelimit_${ip}`);
+            if (!success) {
+                console.warn(`[OpenAds Security] 🚨 Rate Limit Exceeded for IP: ${ip}. Request blocked.`);
+                return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+            }
+        } catch (redisErr) {
+            console.warn(`[OpenAds Security] Redis check failed, bypassing rate limit:`, redisErr);
+            // If Redis is unconfigured or fails, we allow traffic to pass to not break the app.
+        }
+
         const payload = await request.json();
         const { event, placement, publisher, fid, sig, message, nonce, ad, client_type = 'farcaster' } = payload;
 

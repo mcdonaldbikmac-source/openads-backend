@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
         const { error } = await supabase
             .from('campaigns')
-            .update({ status: status })
+            .update({ status: status, updated_at: new Date().toISOString() })
             .eq('id', campaign_id);
 
         if (error) {
