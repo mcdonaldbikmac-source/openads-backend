@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { wallet, name, domain } = body;
+        const { wallet, name, domain, app_type } = body;
 
         if (!wallet || !name || !domain) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
         const { data, error } = await supabase
             .from('apps')
-            .insert([{ publisher_wallet: wallet, name, domain }])
+            .insert([{ publisher_wallet: wallet, name, domain, app_type: app_type || 'website' }])
             .select('id, name, domain, created_at')
             .single();
 

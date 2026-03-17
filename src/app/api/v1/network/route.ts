@@ -5,7 +5,7 @@ export async function GET() {
     try {
         const { data, error } = await supabase
             .from('apps')
-            .select('name, domain')
+            .select('name, domain, app_type')
             .order('created_at', { ascending: false })
             .limit(10); // Limit to top 10 recent apps for the marquee
 
@@ -13,9 +13,16 @@ export async function GET() {
 
         // Map to a simpler format for the landing page marquee
         const publishers = (data || []).map(app => {
+            let userIcon = 'https://cdn.worldvectorlogo.com/logos/base-2.svg'; // Default Base logo
+            if (app.app_type === 'miniapp') {
+                userIcon = 'https://seeklogo.com/images/F/farcaster-logo-F91A2DCBBA-seeklogo.com.png';
+            } else if (app.app_type === 'website') {
+                userIcon = 'https://cdn-icons-png.flaticon.com/512/1006/1006771.png'; // Generic globe/website icon
+            }
+
             return {
                 name: app.name || app.domain,
-                icon: 'https://cdn.worldvectorlogo.com/logos/base-2.svg' // Using Base network logo as default icon instead of globe
+                icon: userIcon
             };
         });
 
