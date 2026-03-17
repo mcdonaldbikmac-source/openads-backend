@@ -82,19 +82,25 @@ export async function POST(request: Request) {
                  const urlOpt = new URL(originHeader);
                  const requestDomain = urlOpt.origin;
 
-                 const { data: domainCheck } = await supabase
-                     .from('openads_publishers')
-                     .select('is_verified')
-                     .eq('wallet_address', publisherWallet)
-                     .eq('domain_url', requestDomain)
-                     .single();
-
-                 if (domainCheck && domainCheck.is_verified) {
+                 // Allow localhost testing
+                 if (requestDomain.includes('localhost') || requestDomain.includes('127.0.0.1')) {
                      isValidDomain = true;
-                     console.log(`[OpenAds Security] 🔒 Strict Origin ${requestDomain} verified for wallet ${publisherWallet}.`);
+                     console.log(`[OpenAds Security] 🔧 Localhost testing allowed for wallet ${publisherWallet}.`);
                  } else {
-                     console.warn(`[OpenAds Security] 🚨 Unauthorized domain ${requestDomain} attempting to claim revenue for wallet ${publisherWallet}. Impression dropped.`);
-                     return NextResponse.json({ error: 'Origin domain is not verified for this publisher wallet.' }, { status: 403 });
+                     const { data: domainCheck } = await supabase
+                         .from('openads_publishers')
+                         .select('is_verified')
+                         .eq('wallet_address', publisherWallet)
+                         .eq('domain_url', requestDomain)
+                         .single();
+
+                     if (domainCheck && domainCheck.is_verified) {
+                         isValidDomain = true;
+                         console.log(`[OpenAds Security] 🔒 Strict Origin ${requestDomain} verified for wallet ${publisherWallet}.`);
+                     } else {
+                         console.warn(`[OpenAds Security] 🚨 Unauthorized domain ${requestDomain} attempting to claim revenue for wallet ${publisherWallet}. Impression dropped.`);
+                         return NextResponse.json({ error: 'Origin domain is not verified for this publisher wallet.' }, { status: 403 });
+                     }
                  }
              } catch (e) {
                  return NextResponse.json({ error: 'Invalid origin header.' }, { status: 403 });
