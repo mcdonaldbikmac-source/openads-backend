@@ -4,18 +4,17 @@ import { supabase } from '@/app/lib/supabase';
 export async function GET() {
     try {
         const { data, error } = await supabase
-            .from('publishers')
-            .select('wallet')
+            .from('apps')
+            .select('name, domain')
             .order('created_at', { ascending: false })
-            .limit(10); // Limit to top 10 recent publishers for the marquee
+            .limit(10); // Limit to top 10 recent apps for the marquee
 
         if (error) throw error;
 
         // Map to a simpler format for the landing page marquee
-        const publishers = (data || []).map(pub => {
-            const shortWallet = pub.wallet ? `${pub.wallet.slice(0, 6)}...${pub.wallet.slice(-4)}` : 'Unknown';
+        const publishers = (data || []).map(app => {
             return {
-                name: `Publisher ${shortWallet}`,
+                name: app.name || app.domain,
                 icon: 'https://cdn.worldvectorlogo.com/logos/base-2.svg' // Using Base network logo as default icon instead of globe
             };
         });
