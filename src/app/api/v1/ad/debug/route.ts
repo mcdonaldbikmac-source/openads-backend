@@ -9,7 +9,7 @@ import { supabase } from '@/app/lib/supabase';
 export async function GET() {
     const { data, error } = await supabase
         .from('campaigns')
-        .update({ status: 'active', budget_wei: '1000000000000000000' })
+        .update({ status: 'active', budget_wei: '1000000000' }) // Fixed to 6 decimals (1e6) USDC standard
         .neq('id', '00000000-0000-0000-0000-000000000000') // dummy condition to match all
         .select('id, creative_title, status');
 
