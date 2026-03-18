@@ -14,6 +14,30 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Missing placement ID' }, { status: 400 });
         }
 
+        // ==========================================
+        // FEATURE: Publisher Pause/Resume Control
+        // Check if the requesting app domain is marked as "paused_"
+        // ==========================================
+        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
+        let requestHost = '';
+        try { requestHost = new URL(originHeader).host; } catch(e) {}
+        
+        let publisherWallet = placementId.split('-')[1]; // Fallback ex: top-0xabc...
+        
+        if (requestHost && publisherWallet && publisherWallet.startsWith('0x')) {
+            const { data: appData } = await supabase
+                .from('apps')
+                .select('app_type')
+                .eq('publisher_wallet', publisherWallet)
+                .ilike('domain', `%${requestHost}%`)
+                .single();
+
+            if (appData && appData.app_type.startsWith('paused_')) {
+                console.log(`[OpenAds] ⏸️ Blocked Ad Request: Domain ${requestHost} is paused by publisher.`);
+                return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 404 });
+            }
+        }
+
         // 1. Query Supabase for eligible campaigns
         // Must be active and have scheduled_start <= now (or null)
         // CRITICAL: We DO NOT select 'image_url' here to avoid memory bloat from thousands of Base64 strings.
