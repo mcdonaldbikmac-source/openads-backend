@@ -130,12 +130,30 @@ export async function GET(request: Request) {
             }
         };
 
+        // =========================================================================
+        // FIX: Multi-format Image JSON Parsing
+        // The frontend Advertiser Dashboard uploads a JSON string mapping sizes to URLs.
+        // We must parse it and extract the correct image for the requested placement.
+        // =========================================================================
+        let finalImageUrl = imageRow.image_url;
+        const requestedFormat = (placementId && placementId.includes('-')) ? placementId.split('-')[0] : 'responsive';
+
+        if (finalImageUrl && finalImageUrl.startsWith('{')) {
+            try {
+                const parsedImages = JSON.parse(finalImageUrl);
+                // Default to the exact requested format, or fallback to the first available image
+                finalImageUrl = parsedImages[requestedFormat] || Object.values(parsedImages)[0] || finalImageUrl;
+            } catch {
+                // If it fails to parse, it's a legacy campaign containing just a raw string URL. Keep it.
+            }
+        }
+
         // Format the response to match the SDK's expected structure
         const formattedAd = {
             id: selectedCampaign.id,
             headline: selectedCampaign.creative_title,
             cta: 'View Offer', // Could make this dynamic later
-            image: imageRow.image_url,
+            image: finalImageUrl,
             url: enforceSecureProtocol(selectedCampaign.creative_url),
             cpc: ethers.formatUnits(selectedCampaign.cpm_rate_wei.toString(), 6), // 6 decimals for USDC
             size: selectedCampaign.ad_type
