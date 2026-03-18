@@ -5,9 +5,11 @@ import { useSearchParams } from 'next/navigation';
 
 function AdFrameContent() {
     const searchParams = useSearchParams();
-    const placementId = searchParams.get('placement');
-    const position = searchParams.get('position') || 'bottom';
     const publisherWallet = searchParams.get('publisher');
+    // BACKWARDS COMPATIBILITY: If the publisher is using an older iframe snippet that only passes ?publisher=xxx
+    // We automatically infer a 'responsive' placement so the ad continues to serve without requiring an app update!
+    const placementId = searchParams.get('placement') || (publisherWallet ? `responsive-${publisherWallet}` : null);
+    const position = searchParams.get('position') || 'bottom';
     const clientType = searchParams.get('client_type') || 'web';
     const fid = searchParams.get('fid') ? parseInt(searchParams.get('fid') as string, 10) : 0;
 
@@ -123,7 +125,7 @@ function AdFrameContent() {
 
     let width = '100%';
     let height = 'auto';
-    let borderRadius = position === 'floating' ? '50%' : '4px';
+    let borderRadius = position === 'floating' || adData.size === '64x64' ? '50%' : '4px';
 
     if (adData.size && adData.size.includes('x')) {
         const [w, h] = adData.size.split('x');
@@ -156,7 +158,10 @@ function AdFrameContent() {
         >
             <img 
                 src={adData.image} 
-                alt="Advertisement" 
+                alt="" 
+                onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                }}
                 onLoad={(e) => {
                     const imgElement = e.currentTarget;
                     const h = imgElement.offsetHeight || imgElement.naturalHeight;
