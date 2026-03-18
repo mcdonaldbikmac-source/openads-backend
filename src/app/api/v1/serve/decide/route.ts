@@ -8,11 +8,13 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const placementId = searchParams.get('placement');
-        const position = searchParams.get('position') || 'all'; // Default to 'all' if not provided
+        const position = (searchParams.get('position') || 'all').toLowerCase(); // Default to 'all' if not provided
 
         if (!placementId) {
             return NextResponse.json({ error: 'Missing placement ID' }, { status: 400 });
         }
+
+        const requestedFormat = (placementId && placementId.includes('-')) ? placementId.split('-')[0] : 'responsive';
 
         // ==========================================
         // FEATURE: Publisher Pause/Resume Control
@@ -28,7 +30,7 @@ export async function GET(request: Request) {
             const { data: appData } = await supabase
                 .from('apps')
                 .select('app_type')
-                .eq('publisher_wallet', publisherWallet)
+                .ilike('publisher_wallet', publisherWallet)
                 .ilike('domain', `%${requestHost}%`)
                 .single();
 
@@ -55,17 +57,24 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'No active campaigns available' }, { status: 404 });
         }
 
-        // 1.5 Filter by requested position (Ad Format Matching)
-        let filteredByPosition = campaigns;
-        if (position !== 'all') {
-            filteredByPosition = campaigns.filter(camp => {
-                const types = camp.ad_type || '';
+        // 1.5 Filter by explicit placement dimensions AND position to prevent Auction Hijacking
+        const filteredByPosition = campaigns.filter(camp => {
+            const types = camp.ad_type || '';
+            
+            // 1. Strict geometry enforcement: The ad MUST match the placement dimensions explicitly.
+            if (requestedFormat !== 'responsive' && !types.includes(requestedFormat) && !types.includes('responsive')) {
+                return false;
+            }
+
+            // 2. Legacy position enforcement (if present)
+            if (position !== 'all') {
                 if (position === 'top' || position === 'bottom') return types.includes('320x50') || types.includes('responsive');
                 if (position === 'popup') return types.includes('300x250') || types.includes('responsive');
                 if (position === 'floating') return types.includes('64x64') || types.includes('responsive');
-                return true;
-            });
-        }
+            }
+            
+            return true;
+        });
 
         if (filteredByPosition.length === 0) {
             return NextResponse.json({ error: 'No active campaigns matching requested position' }, { status: 404 });
@@ -136,7 +145,7 @@ export async function GET(request: Request) {
         // We must parse it and extract the correct image for the requested placement.
         // =========================================================================
         let finalImageUrl = imageRow.image_url;
-        const requestedFormat = (placementId && placementId.includes('-')) ? placementId.split('-')[0] : 'responsive';
+        // requestedFormat already extracted at the top of the route logic
 
         if (finalImageUrl && finalImageUrl.startsWith('{')) {
             try {

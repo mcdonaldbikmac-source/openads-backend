@@ -1,0 +1,21 @@
+
+  <!DOCTYPE html><html><head>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #eee; margin: 0; padding: 0; display:flex; justify-content:center; }
+    .app { width: 100vw; height: 100vh; max-width: 400px; background: #fff; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+    .header { padding: 20px; text-align: center; border-bottom: 1px solid #ddd; font-weight: bold; font-size: 18px; }
+    .content { padding: 20px; display:flex; flex-direction:column; gap: 20px; }
+    .card { background: #f9f9f9; padding: 30px; border-radius: 12px; text-align: center; font-size: 24px; font-weight: bold; }
+    .dimmer { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999998; }
+  </style></head><body>
+    <div class="app">
+      <div class="header">🐷 Piggy Bank Mini-App</div>
+      <div class="content">
+        <div class="card">0.00034 CBBTC</div>
+        <div class="card">0.125 DEGEN</div>
+      </div>
+      <div class="dimmer"></div>
+      <iframe src="https://openads-backend.vercel.app/serve?placement=300x250-0xb9a3faeb416580f4bc1c8f6e2d4773b580e9d18c&position=popup&preview=true" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:999999; border:none; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border-radius: 8px; background: #fff;" width="300" height="250" frameborder="0" scrolling="no"></iframe>
+      <iframe src="https://openads-backend.vercel.app/serve?placement=64x64-0xb9a3faeb416580f4bc1c8f6e2d4773b580e9d18c&position=floating&preview=true" style="position:fixed; top:20px; right:20px; z-index:999999; border:none;" width="64" height="64" frameborder="0" scrolling="no"></iframe>
+    </div>
+  </body></html>

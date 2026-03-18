@@ -100,11 +100,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 403 });
         }
 
-        // Validate the Publisher's Domain
+        // Validate the Publisher's Domain using case-insensitive wallet matching
         const { data: publisherApp, error: appError } = await supabase
             .from('apps')
-            .select('id, domain, logo_url')
-            .eq('publisher_wallet', publisherWallet)
+            .select('id, domain, logo_url, publisher_wallet')
+            .ilike('publisher_wallet', publisherWallet)
             .ilike('domain', `%${requestHost}%`)
             .single();
 
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
 
             const { data, error } = await supabase.rpc('record_impression', {
                 p_campaign_id: ad.id,
-                p_publisher_wallet: publisherWallet,
+                p_publisher_wallet: publisherApp.publisher_wallet,
                 p_fid: safeFid,
                 p_event_type: normalizedEvent,
                 p_sig: safeSig
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
 
             const { error } = await supabase.from('tracking_events').insert([{
                 campaign_id: ad.id,
-                publisher_wallet: publisherWallet,
+                publisher_wallet: publisherApp.publisher_wallet,
                 fid: safeFid,
                 event_type: normalizedEvent,
                 sig: safeSig

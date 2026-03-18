@@ -8,7 +8,7 @@ function AdFrameContent() {
     const publisherWallet = searchParams.get('publisher');
     // BACKWARDS COMPATIBILITY: Relax position default to 'all' so legacy snippets can still serve Pop up icons and highest-bidding ads.
     const placementId = searchParams.get('placement') || (publisherWallet ? `responsive-${publisherWallet}` : null);
-    const position = searchParams.get('position') || 'all';
+    const position = (searchParams.get('position') || 'all').toLowerCase();
     const clientType = searchParams.get('client_type') || 'web';
     const fid = searchParams.get('fid') ? parseInt(searchParams.get('fid') as string, 10) : 0;
     const isPreview = searchParams.get('preview') === 'true';
@@ -63,7 +63,7 @@ function AdFrameContent() {
                             observer.disconnect();
                             
                             // Log cryptographically signed verified impression
-                            fetch('/api/v1/serve/track', {
+                            fetch('/api/v1/serve/pulse', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -110,7 +110,7 @@ function AdFrameContent() {
         }, '*');
         
         // 2. Track click synchronously in background
-        fetch('/api/v1/serve/track', {
+        fetch('/api/v1/serve/pulse', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -159,9 +159,45 @@ function AdFrameContent() {
                 overflow: 'hidden', 
                 borderRadius: borderRadius, 
                 margin: '0 auto', 
-                background: 'transparent' 
+                background: 'transparent',
+                position: 'relative'
             }}
         >
+            {/* Overlay Buttons */}
+            <div style={{
+                position: 'absolute', top: position === 'floating' || adData.size === '64x64' ? '12px' : '6px', right: position === 'floating' || adData.size === '64x64' ? '12px' : '6px', display: 'flex', gap: '6px', zIndex: 1000000
+            }}>
+                {/* Info Button */}
+                <div 
+                    onClick={(e) => { e.stopPropagation(); window.open('https://openads.xyz', '_blank'); }}
+                    style={{
+                        width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', 
+                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        fontSize: '11px', fontWeight: 'bold', cursor: 'help', backdropFilter: 'blur(4px)'
+                    }}
+                    title="Powered by OpenAds"
+                >
+                    ?
+                </div>
+                {/* Close Button */}
+                <div 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        sessionStorage.setItem(`openads_closed_${adData.id}`, 'true');
+                        if (containerRef.current) containerRef.current.style.display = 'none';
+                        window.parent.postMessage({ type: 'OPENADS_COLLAPSE' }, '*');
+                    }}
+                    style={{
+                        width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', 
+                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        fontSize: '9px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)'
+                    }}
+                    title="Close Ad"
+                >
+                    ✕
+                </div>
+            </div>
+
             <img 
                 src={adData.image} 
                 alt="" 

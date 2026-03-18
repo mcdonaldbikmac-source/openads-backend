@@ -1,14 +1,18 @@
 const puppeteer = require('puppeteer');
-const fs = require('fs');
 
-(async () => {
-  const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage();
-  await page.setViewport({ width: 400, height: 800 });
-  await page.goto('https://piggy-bank-cbbtc.vercel.app/', { waitUntil: 'networkidle2' });
-  await new Promise(r => setTimeout(r, 2000));
-  const html = await page.evaluate(() => document.documentElement.outerHTML);
-  fs.writeFileSync('piggy_bank_dom.html', html);
-  await browser.close();
-  console.log("DOM saved to piggy_bank_dom.html");
-})();
+async function run() {
+    const browser = await puppeteer.launch({ headless: 'new' });
+    const page = await browser.newPage();
+    try {
+        await page.goto('http://localhost:3000/serve?publisher=0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B&placement=300x250-0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B&position=popup&preview=true', {waitUntil: 'networkidle0', timeout: 30000});
+        await new Promise(r => setTimeout(r, 3000));
+        const html = await page.content();
+        console.log("------- EXTRACTED DOM -------");
+        console.log(html);
+        console.log("-----------------------------");
+    } catch(e) {
+        console.error(e);
+    }
+    await browser.close();
+}
+run();
