@@ -42,6 +42,21 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        // Anti-Spam Check: Limit to 3 apps per publisher wallet
+        const { count, error: countError } = await supabase
+            .from('apps')
+            .select('*', { count: 'exact', head: true })
+            .eq('publisher_wallet', wallet);
+
+        if (countError) throw countError;
+        
+        if (count !== null && count >= 3) {
+            return NextResponse.json(
+                { error: 'Limit Reached: Maximum of 3 apps allowed per publisher to prevent spam.' }, 
+                { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+            );
+        }
+
         const { data, error } = await supabase
             .from('apps')
             .insert([{ publisher_wallet: wallet, name, domain, app_type: app_type || 'website' }])
