@@ -5,21 +5,39 @@ import { ethers } from 'ethers';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { campaign_id, amount } = body;
+        const { campaign_id, amount, signature, signer_wallet } = body;
 
-        if (!campaign_id || amount === undefined || amount <= 0) {
-            return NextResponse.json({ error: 'Invalid or missing parameters (campaign_id, amount)' }, { status: 400 });
+        if (!campaign_id || amount === undefined || amount <= 0 || !signature || !signer_wallet) {
+            return NextResponse.json({ error: 'Invalid or missing parameters (campaign_id, amount, signature)' }, { status: 400 });
         }
 
-        // Fetch current campaign budget
+        // 1. Authenticate with EIP-191 Signature
+        try {
+            const expectedMessage = `Sign to add $${amount} to campaign ${campaign_id}`;
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
+                throw new Error("Signature mismatch");
+            }
+        } catch (authErr) {
+            console.error('[Security] Budget Addition SIWE Failed:', authErr);
+            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+        }
+
+        // Fetch current campaign budget and ownership
         const { data: campaign, error: fetchErr } = await supabase
             .from('campaigns')
-            .select('budget_wei, status')
+            .select('budget_wei, status, advertiser_wallet')
             .eq('id', campaign_id)
             .single();
 
         if (fetchErr || !campaign) {
             return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+        }
+
+        // 2. Authorize that the signer actually owns this campaign before inflating budget
+        if (campaign.advertiser_wallet.toLowerCase() !== signer_wallet.toLowerCase()) {
+            console.warn(`[Security] Wallet ${signer_wallet} tried to inflate budget for campaign owned by ${campaign.advertiser_wallet}`);
+            return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }
 
         // Add amount to budget_wei (amount is in USD string, we convert using ethers parsing equivalent)

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
+import { ethers } from 'ethers';
 
 // GET: Fetch all registered miniapps/websites for a given publisher wallet
 export async function GET(request: Request) {
@@ -47,10 +48,22 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { wallet, name, domain, app_type } = body;
+        const { wallet, name, domain, app_type, signature } = body;
 
-        if (!wallet || !name || !domain) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        if (!wallet || !name || !domain || !signature) {
+            return NextResponse.json({ error: 'Missing required fields including signature' }, { status: 400 });
+        }
+
+        // 1. Authenticate with EIP-191 Signature
+        try {
+            const expectedMessage = `Sign to register domain ${domain} for publisher ${wallet}`;
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                throw new Error("Signature mismatch");
+            }
+        } catch (authErr) {
+            console.error('[Security] Publisher App Registration SIWE Failed:', authErr);
+            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
         }
 
         // ==========================================

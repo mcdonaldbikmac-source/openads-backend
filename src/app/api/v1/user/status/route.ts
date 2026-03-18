@@ -1,13 +1,43 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 
+import { ethers } from 'ethers';
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { campaign_id, status } = body;
+        const { campaign_id, status, signature, signer_wallet } = body;
 
-        if (!campaign_id || !status) {
-            return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+        if (!campaign_id || !status || !signature || !signer_wallet) {
+            return NextResponse.json({ error: 'Missing parameters including signature for authentication' }, { status: 400 });
+        }
+
+        // 1. Authenticate with EIP-191 Signature
+        try {
+            const expectedMessage = `Sign to update status for campaign ${campaign_id} to ${status}`;
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
+                throw new Error("Signature mismatch");
+            }
+        } catch (authErr) {
+            console.error('[Security] Status Toggle SIWE Failed:', authErr);
+            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+        }
+
+        // 2. Authorize that the signer actually owns this campaign
+        const { data: campaignAuth, error: authVerifyErr } = await supabase
+            .from('campaigns')
+            .select('advertiser_wallet')
+            .eq('id', campaign_id)
+            .single();
+
+        if (authVerifyErr || !campaignAuth) {
+            return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+        }
+
+        if (campaignAuth.advertiser_wallet.toLowerCase() !== signer_wallet.toLowerCase()) {
+            console.warn(`[Security] IDOR attempt blocked! Wallet ${signer_wallet} tried to toggle campaign owned by ${campaignAuth.advertiser_wallet}`);
+            return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }
 
         const { error } = await supabase
