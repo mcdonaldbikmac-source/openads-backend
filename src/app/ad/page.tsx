@@ -97,7 +97,11 @@ function AdFrameContent() {
     const handleClick = () => {
         if (!adData) return;
         
-        // 1. Notify parent to execute redirect to bypass Farcaster Webview iframe traps
+        // 1. Execute redirect to the advertiser's landing page in a new secure tab.
+        // Farcaster WebViews natively handle _blank by opening the device's default browser perfectly.
+        window.open(adData.url, '_blank', 'noopener,noreferrer');
+        
+        // Ensure graceful fallback notification for publishers who happen to still be running legacy sdk.js
         window.parent.postMessage({
             type: 'OPENADS_CLICK',
             url: adData.url
