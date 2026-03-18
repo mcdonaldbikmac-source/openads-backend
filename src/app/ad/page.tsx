@@ -74,7 +74,8 @@ function AdFrameContent() {
                                     fid,
                                     logo: searchParams.get('logo') || '',
                                     sig: 'verified_origin',
-                                    message: `impression:${placementId}:${publisherWallet}`
+                                    message: `impression:${placementId}:${publisherWallet}`,
+                                    parent_url: document.referrer || window.location.href
                                 })
                             }).catch(console.error);
                             

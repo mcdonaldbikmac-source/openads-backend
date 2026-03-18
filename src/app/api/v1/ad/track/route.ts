@@ -82,6 +82,40 @@ export async function POST(request: Request) {
         // MOCK SIG to satisfy strict DB validations that expect a 132-char hex string 
         const MOCK_WEB_SIG = '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
 
+        // =========================================================================
+        // SECURITY UPDATE: Strict Domain Authentication mapped to Publisher Wallet
+        // We use payload.parent_url sent from the iframe to resolve the true domain.
+        // =========================================================================
+        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
+        let requestHost = '';
+        if (payload.parent_url) {
+            try { requestHost = new URL(payload.parent_url).host; } catch(e) {}
+        }
+        if (!requestHost) {
+            try { requestHost = new URL(originHeader).host; } catch(e) {}
+        }
+
+        if (!requestHost) {
+            console.warn(`[Security] Blocked tracking ping with no Origin/Referer/Parent header: ${ip}`);
+            return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 403 });
+        }
+
+        // Validate the Publisher's Domain
+        const { data: publisherApp, error: appError } = await supabase
+            .from('apps')
+            .select('id, domain, logo_url')
+            .eq('publisher_wallet', publisherWallet)
+            .ilike('domain', `%${requestHost}%`)
+            .single();
+
+        if (appError || !publisherApp) {
+            console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
+            return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
+        }
+
+        // =========================================================================
+        // DATABASE INSERTION (Must happen AFTER Security Checks!)
+        // =========================================================================
         // Record the Impression Securely via our Atomic RPC function
         if (normalizedEvent === 'view') {
             const safeFid = client_type === 'web' ? 0 : Number(fid);
@@ -114,32 +148,6 @@ export async function POST(request: Request) {
             }]);
 
             if (error) console.error('Supabase Click Log Error:', error.message || error);
-        }
-
-        // =========================================================================
-        // SECURITY UPDATE: Strict Domain Authentication mapped to Publisher Wallet
-        // Replaces the reliance on signatures since pure iframes cannot SIWF.
-        // =========================================================================
-        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
-        let requestHost = '';
-        try { requestHost = new URL(originHeader).host; } catch(e) {}
-
-        if (!requestHost) {
-            console.warn(`[Security] Blocked tracking ping with no Origin/Referer header: ${ip}`);
-            return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 403 });
-        }
-
-        // Validate the Publisher's Domain
-        const { data: publisherApp, error: appError } = await supabase
-            .from('apps')
-            .select('id, domain, logo_url')
-            .eq('publisher_wallet', publisherWallet)
-            .ilike('domain', `%${requestHost}%`)
-            .single();
-
-        if (appError || !publisherApp) {
-            console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
-            return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
         }
 
         // =========================================================================
