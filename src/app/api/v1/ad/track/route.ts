@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         // Validate the Publisher's Domain
         const { data: publisherApp, error: appError } = await supabase
             .from('apps')
-            .select('domain')
+            .select('id, domain, logo_url')
             .eq('publisher_wallet', publisherWallet)
             .ilike('domain', `%${requestHost}%`)
             .single();
@@ -140,6 +140,19 @@ export async function POST(request: Request) {
         if (appError || !publisherApp) {
             console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
             return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
+        }
+
+        // =========================================================================
+        // SECURITY UPDATE: Restore Publisher Verification (Soft-Lock Fix)
+        // If this is the very first valid ping from the authorized domain, 
+        // mark it as 'verified' in the DB to unlock the Dashboard UI.
+        // =========================================================================
+        if (!publisherApp.logo_url) {
+            await supabase
+                .from('apps')
+                .update({ logo_url: 'verified' })
+                .eq('id', publisherApp.id);
+            console.log(`[OpenAds Backend API] ✅ Publisher App ${publisherApp.id} successfully verified via first ping!`);
         }
 
 

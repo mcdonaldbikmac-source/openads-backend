@@ -1,21 +1,35 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 
+import { ethers } from 'ethers';
+
 // PATCH: Toggle App Pause State (without schema migrations)
 export async function PATCH(request: Request) {
     try {
         const body = await request.json();
-        const { id, wallet, action } = body;
+        const { id, wallet, action, signature } = body;
 
-        if (!id || !wallet || !action) {
-            return NextResponse.json({ error: 'Missing required parameters (id, wallet, action)' }, { status: 400 });
+        if (!id || !wallet || !action || !signature) {
+            return NextResponse.json({ error: 'Missing required parameters (id, wallet, action, signature)' }, { status: 400 });
+        }
+        
+        // 1. Authenticate with EIP-191 Signature (SIWE)
+        try {
+            const expectedMessage = `Sign to ${action} app ${id}`;
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                throw new Error("Signature mismatch");
+            }
+        } catch (authErr) {
+            console.error('[Security] App Toggle SIWE Failed:', authErr);
+            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
         }
         
         if (action !== 'pause' && action !== 'resume') {
             return NextResponse.json({ error: 'Invalid action. Must be "pause" or "resume".' }, { status: 400 });
         }
 
-        // 1. Fetch current app type to ensure we have the correct base string
+        // 2. Fetch current app type to ensure we have the correct base string
         const { data: currApp, error: fetchErr } = await supabase
             .from('apps')
             .select('app_type')
@@ -41,7 +55,7 @@ export async function PATCH(request: Request) {
             }
         }
 
-        // 2. Perform the actual update back to DB
+        // 3. Perform the actual update back to DB
         const { data, error } = await supabase
             .from('apps')
             .update({ app_type: newType })
