@@ -57,7 +57,15 @@ export async function POST(request: Request) {
         // 1. Authenticate with EIP-191 Signature
         try {
             const expectedMessage = `Sign to register domain ${domain} for publisher ${wallet}`;
-            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            let recoveredAddress;
+            
+            if (body.message) {
+                // Farcaster Auth loop bypass using original SIWE message
+                recoveredAddress = ethers.verifyMessage(body.message, signature);
+            } else {
+                recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            }
+
             if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
                 throw new Error("Signature mismatch");
             }

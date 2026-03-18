@@ -16,7 +16,14 @@ export async function PATCH(request: Request) {
         // 1. Authenticate with EIP-191 Signature (SIWE)
         try {
             const expectedMessage = `Sign to ${action} app ${id}`;
-            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            let recoveredAddress;
+            
+            if (body.message) {
+                recoveredAddress = ethers.verifyMessage(body.message, signature);
+            } else {
+                recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            }
+
             if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
                 throw new Error("Signature mismatch");
             }
