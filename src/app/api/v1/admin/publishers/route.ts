@@ -12,26 +12,16 @@ export async function GET() {
 
         if (financesError) throw financesError;
 
-        // 2. Aggregate all views to get impressions efficiently
-        const { data: viewsData, error: viewsError } = await supabase
-            .from('tracking_events')
-            .select('publisher_wallet')
-            .eq('event_type', 'view');
-
-        if (viewsError) throw viewsError;
-
-        // Count views per wallet
-        const viewCounts: Record<string, number> = {};
-        (viewsData || []).forEach(v => {
-            const w = v.publisher_wallet?.toLowerCase();
-            if (w) {
-                viewCounts[w] = (viewCounts[w] || 0) + 1;
-            }
-        });
-
-        // 3. Merge Data
-        const enrichedPublishers = (finances || []).map(financeRecord => {
+        // 2 & 3. Merge Data efficiently with database-level COUNT aggregation
+        const enrichedPublishers = await Promise.all((finances || []).map(async financeRecord => {
             const wallet = financeRecord.wallet?.toLowerCase() || '';
+
+            // Efficiently get the exact view count without pulling data into serverless memory
+            const { count: views } = await supabase
+                .from('tracking_events')
+                .select('*', { count: 'exact', head: true })
+                .eq('publisher_wallet', financeRecord.wallet)
+                .eq('event_type', 'view');
             
             // Convert earnings from WEI to human readable USDC
             let rawEarningsWei = financeRecord ? String(financeRecord.total_earned_wei).split('.')[0] : '0';
@@ -47,12 +37,12 @@ export async function GET() {
                 domain_url: '',
                 app_logo_url: 'https://cdn.worldvectorlogo.com/logos/globe-3.svg',
                 is_verified: true,
-                impressions: viewCounts[wallet] || 0,
+                impressions: views || 0,
                 earnings: earningsFormatted,
                 status: 'active',
                 created_at: financeRecord.created_at
             };
-        });
+        }));
 
         return NextResponse.json(
             { success: true, publishers: enrichedPublishers },
