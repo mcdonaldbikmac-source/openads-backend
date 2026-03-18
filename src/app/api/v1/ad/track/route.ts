@@ -116,21 +116,30 @@ export async function POST(request: Request) {
             if (error) console.error('Supabase Click Log Error:', error.message || error);
         }
 
-        // Extraction: Safely get the host from origin or referer
+        // =========================================================================
+        // SECURITY UPDATE: Strict Domain Authentication mapped to Publisher Wallet
+        // Replaces the reliance on signatures since pure iframes cannot SIWF.
+        // =========================================================================
         const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
         let requestHost = '';
         try { requestHost = new URL(originHeader).host; } catch(e) {}
 
-        // Background task: Update publisher app logo dynamically (Fire and forget) - acts as Verification
-        if (logo && publisherWallet && typeof logo === 'string' && logo.startsWith('http') && requestHost) {
-            supabase.from('apps')
-                .update({ logo_url: logo })
-                .eq('publisher_wallet', publisherWallet)
-                .is('logo_url', null)
-                .ilike('domain', `%${requestHost}%`)
-                .then(({ error }) => {
-                    if (error) console.error('[Tracking API] Failed to update logo for app verification:', error.message);
-                });
+        if (!requestHost) {
+            console.warn(`[Security] Blocked tracking ping with no Origin/Referer header: ${ip}`);
+            return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 403 });
+        }
+
+        // Validate the Publisher's Domain
+        const { data: publisherApp, error: appError } = await supabase
+            .from('apps')
+            .select('domain')
+            .eq('publisher_wallet', publisherWallet)
+            .ilike('domain', `%${requestHost}%`)
+            .single();
+
+        if (appError || !publisherApp) {
+            console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
+            return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
         }
 
 

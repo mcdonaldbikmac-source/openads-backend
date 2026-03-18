@@ -119,13 +119,24 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Failed to fetch ad creative' }, { status: 500 });
         }
 
+        // SECURITY: Mitigate Stored XSS via Open Redirect
+        // Advertisers MUST NOT be able to submit `javascript:alert(1)` as their link.
+        const enforceSecureProtocol = (url: string) => {
+            try {
+                const parsed = new URL(url);
+                return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : 'https://openads.xyz';
+            } catch {
+                return 'https://openads.xyz';
+            }
+        };
+
         // Format the response to match the SDK's expected structure
         const formattedAd = {
             id: selectedCampaign.id,
             headline: selectedCampaign.creative_title,
             cta: 'View Offer', // Could make this dynamic later
             image: imageRow.image_url,
-            url: selectedCampaign.creative_url,
+            url: enforceSecureProtocol(selectedCampaign.creative_url),
             cpc: ethers.formatUnits(selectedCampaign.cpm_rate_wei.toString(), 6), // 6 decimals for USDC
             size: selectedCampaign.ad_type
         };
