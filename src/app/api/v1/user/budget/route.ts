@@ -5,10 +5,10 @@ import { ethers } from 'ethers';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { campaign_id, amount, signature, signer_wallet } = body;
+        const { campaign_id, amount, signature, txHash, signer_wallet } = body;
 
-        if (!campaign_id || amount === undefined || amount <= 0 || !signature || !signer_wallet) {
-            return NextResponse.json({ error: 'Invalid or missing parameters (campaign_id, amount, signature)' }, { status: 400 });
+        if (!campaign_id || amount === undefined || amount <= 0 || !signature || !txHash || !signer_wallet) {
+            return NextResponse.json({ error: 'Invalid or missing parameters (campaign_id, amount, signature, txHash)' }, { status: 400 });
         }
 
         // 1. Authenticate with EIP-191 Signature
@@ -21,6 +21,24 @@ export async function POST(request: Request) {
         } catch (authErr) {
             console.error('[Security] Budget Addition SIWE Failed:', authErr);
             return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+        }
+
+        // 2. Verify On-Chain Transaction (Stop Infinite Minting Flaw)
+        try {
+            const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
+            const receipt = await provider.getTransactionReceipt(txHash);
+
+            if (!receipt || receipt.status !== 1) {
+                return NextResponse.json({ error: 'Web3 Transaction failed or not found on Base mainnet.' }, { status: 400 });
+            }
+            
+            // OPENADS_VAULT_ADDRESS verification
+            if (receipt.to?.toLowerCase() !== '0xA16459A0282641CeA91B67459F0bAE2B5456B15F'.toLowerCase()) {
+                return NextResponse.json({ error: 'Invalid smart contract destination. Funds were not sent to the Vault.' }, { status: 400 });
+            }
+        } catch (rpcErr) {
+            console.error('[Security] RPC TxHash Verification Failed:', rpcErr);
+            return NextResponse.json({ error: 'Failed to verify blockchain transaction.' }, { status: 500 });
         }
 
         // Fetch current campaign budget and ownership

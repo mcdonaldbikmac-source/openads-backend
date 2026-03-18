@@ -1,13 +1,35 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
+import { ethers } from 'ethers';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { wallet, referred_by } = body;
+        const { wallet, referred_by, signature } = body;
 
         if (!wallet) {
             return NextResponse.json({ error: 'Missing wallet parameter' }, { status: 400 });
+        }
+
+        // =========================================================================
+        // SECURITY UPDATE: Prevent Pre-Registration Referral Hijacking
+        // If the wallet is a Web3 custody address (0x...), it MUST be cryptographically proven
+        // to prevent attackers from mass-registering unjoined wallets under their referral tree.
+        // Farcaster FIDs (numeric) are exempt here as they can't receive USDC without linking a 0x wallet later.
+        // =========================================================================
+        if (String(wallet).startsWith('0x')) {
+            if (!signature) {
+                return NextResponse.json({ error: 'Cryptographic signature required for Web3 Wallet registration to prevent Referral Hijacking.' }, { status: 401 });
+            }
+            try {
+                const recoveredAddress = ethers.verifyMessage(`Sign to login to OpenAds Network`, signature);
+                if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                    throw new Error("Signature mismatch");
+                }
+            } catch (err) {
+                console.error('[Security] Failed to verify SIWE on Login:', err);
+                return NextResponse.json({ error: 'Invalid authentication signature.' }, { status: 401 });
+            }
         }
 
         // 1. Check if the publisher already exists
