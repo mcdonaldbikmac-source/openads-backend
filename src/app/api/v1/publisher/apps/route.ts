@@ -48,7 +48,15 @@ export async function POST(request: Request) {
             .select('id, name, domain, created_at')
             .single();
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === '23505') {
+                return NextResponse.json(
+                    { error: 'This App Name or Domain is already registered to a Publisher.' }, 
+                    { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+                );
+            }
+            throw error;
+        }
 
         return NextResponse.json(
             { success: true, app: data },
@@ -57,7 +65,7 @@ export async function POST(request: Request) {
                 headers: { 'Access-Control-Allow-Origin': '*' } 
             }
         );
-    } catch (err) {
+    } catch (err: any) {
         console.error('Register Publisher App Error:', err);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
