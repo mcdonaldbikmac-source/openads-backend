@@ -86,6 +86,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid Domain URL format.' }, { status: 400 });
         }
 
+        const lowerDomain = domain.toLowerCase();
+        if (lowerDomain.includes('farcaster.xyz') || lowerDomain.includes('warpcast.com')) {
+            return NextResponse.json({ error: 'Farcaster wrapper links are not permitted as they break Sandbox origin verification. Please enter your actual physical hosting domain (e.g., vercel.app).' }, { status: 400 });
+        }
+
         // Anti-Spam Check: Limit to 3 apps per publisher wallet
         const { count, error: countError } = await supabase
             .from('apps')
