@@ -19,8 +19,19 @@ export async function GET(request: Request) {
 
         if (error) throw error;
 
+        // Fetch the latest tracking event for this publisher to act as a system-wide health check
+        const { data: latestImp } = await supabase
+            .from('tracking_events')
+            .select('created_at')
+            .eq('publisher_wallet', wallet)
+            .eq('event_type', 'view')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        const lastActiveAt = latestImp && latestImp.length > 0 ? latestImp[0].created_at : null;
+
         return NextResponse.json(
-            { success: true, apps: apps || [] },
+            { success: true, apps: apps || [], last_active_at: lastActiveAt },
             { 
                 status: 200, 
                 headers: { 'Access-Control-Allow-Origin': '*' } 
