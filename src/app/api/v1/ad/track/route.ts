@@ -106,14 +106,20 @@ export async function POST(request: Request) {
             if (error) console.error('Supabase Click Log Error:', error.message || error);
         }
 
-        // Background task: Update publisher app logo dynamically (Fire and forget)
-        if (logo && publisherWallet && typeof logo === 'string' && logo.startsWith('http')) {
+        // Extraction: Safely get the host from origin or referer
+        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
+        let requestHost = '';
+        try { requestHost = new URL(originHeader).host; } catch(e) {}
+
+        // Background task: Update publisher app logo dynamically (Fire and forget) - acts as Verification
+        if (logo && publisherWallet && typeof logo === 'string' && logo.startsWith('http') && requestHost) {
             supabase.from('apps')
                 .update({ logo_url: logo })
                 .eq('publisher_wallet', publisherWallet)
                 .is('logo_url', null)
+                .ilike('domain', `%${requestHost}%`)
                 .then(({ error }) => {
-                    if (error) console.error('[Tracking API] Failed to update logo:', error.message);
+                    if (error) console.error('[Tracking API] Failed to update logo for app verification:', error.message);
                 });
         }
 
