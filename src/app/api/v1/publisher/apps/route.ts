@@ -87,7 +87,7 @@ export async function POST(request: Request) {
         }
 
         const lowerDomain = domain.toLowerCase();
-        if (lowerDomain.includes('farcaster.xyz') || lowerDomain.includes('warpcast.com')) {
+        if (lowerDomain.includes('farcaster.xyz/miniapp') || lowerDomain.includes('warpcast.com/~/')) {
             return NextResponse.json({ error: 'Farcaster wrapper links are not permitted as they break Sandbox origin verification. Please enter your actual physical hosting domain (e.g., vercel.app).' }, { status: 400 });
         }
 
