@@ -42,6 +42,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        // ==========================================
+        // EDGE CASE 2: Malformed Registration Data
+        // ==========================================
+        const ethRegex = /^0x[a-fA-F0-9]{40}$/;
+        if (!ethRegex.test(wallet)) {
+            return NextResponse.json({ error: 'Invalid Ethereum Wallet Address format.' }, { status: 400 });
+        }
+        
+        if (domain.length < 5 || !domain.includes('.')) {
+            return NextResponse.json({ error: 'Invalid Domain URL format.' }, { status: 400 });
+        }
+
         // Anti-Spam Check: Limit to 3 apps per publisher wallet
         const { count, error: countError } = await supabase
             .from('apps')
