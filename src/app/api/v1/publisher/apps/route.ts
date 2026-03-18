@@ -57,6 +57,25 @@ export async function POST(request: Request) {
             );
         }
 
+        // Check for Duplicate Domain Registration
+        const { data: existingApp, error: existError } = await supabase
+            .from('apps')
+            .select('id')
+            .eq('publisher_wallet', wallet)
+            .eq('domain', domain)
+            .limit(1);
+
+        if (existError) {
+            console.error('Check duplicate app error:', existError);
+        }
+
+        if (existingApp && existingApp.length > 0) {
+            return NextResponse.json(
+                { error: 'Duplicate App: You have already registered this domain.' }, 
+                { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+            );
+        }
+
         const { data, error } = await supabase
             .from('apps')
             .insert([{ publisher_wallet: wallet, name, domain, app_type: app_type || 'website' }])
