@@ -24,7 +24,29 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid URL format provided' }, { status: 400 });
         }
 
-        // 1. Voucher Redemption Logic
+        const { signature, txHash, signer_wallet } = body;
+
+        if (!signature || !signer_wallet) {
+            return NextResponse.json({ error: 'Missing EIP-191 signature authentication to create an ad.' }, { status: 400 });
+        }
+
+        // 1. Authenticate with EIP-191 Signature
+        try {
+            const expectedMessage = `Sign to authorize campaign creation for $${budget}`;
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
+                throw new Error("Signature mismatch");
+            }
+            if (signer_wallet.toLowerCase() !== advertiser.toLowerCase()) {
+                console.warn(`[Security] IDOR attempt! Wallet ${signer_wallet} tried to create ad claiming to be ${advertiser}`);
+                return NextResponse.json({ error: 'Unauthorized to act as this advertiser.' }, { status: 403 });
+            }
+        } catch (authErr) {
+            console.error('[Security] Campaign Creation SIWE Failed:', authErr);
+            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+        }
+
+        // 2. Voucher Redemption OR On-Chain Deposit Verification
         let validatedBudget = Number(budget);
         if (voucherCode) {
             const { data: voucherData, error: voucherError } = await supabase
@@ -51,6 +73,34 @@ export async function POST(request: Request) {
 
             // Note: If partial payments exist, the actual budget is the frontend claimed budget. 
             // In a strict financial setup, budgetWei should be `Vault Deposit + VoucherAmount`.
+        } else {
+            // NO VOUCHER: MUST Verify On-Chain Transaction (Stop Zero-Cost Infinite Minting Flaw & Replay Attacks)
+            if (!txHash) {
+                return NextResponse.json({ error: 'Missing txHash. You must deposit USDC to the OpenAdsVault to create a campaign.' }, { status: 400 });
+            }
+
+            try {
+                const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
+                const receipt = await provider.getTransactionReceipt(txHash);
+
+                if (!receipt || receipt.status !== 1) {
+                    return NextResponse.json({ error: 'Web3 Transaction failed or not found on Base mainnet.' }, { status: 400 });
+                }
+                
+                // SECURITY: OPENADS_VAULT_ADDRESS verification
+                if (receipt.to?.toLowerCase() !== '0xA16459A0282641CeA91B67459F0bAE2B5456B15F'.toLowerCase()) {
+                    return NextResponse.json({ error: 'Invalid smart contract destination. Funds were not sent to the Vault.' }, { status: 400 });
+                }
+
+                // SECURITY: Transaction Sender Spoofing/Replay Protection!
+                if (receipt.from?.toLowerCase() !== signer_wallet.toLowerCase()) {
+                    console.error(`[Security] Zero-Cost Minting Blocked! API caller ${signer_wallet} attempted to claim txHash ${txHash} which originated from ${receipt.from}`);
+                    return NextResponse.json({ error: 'Transaction Spoofing Blocked. The sender of the transaction does not match your wallet.' }, { status: 403 });
+                }
+            } catch (rpcErr) {
+                console.error('[Security] RPC TxHash Verification Failed in Campaign Create:', rpcErr);
+                return NextResponse.json({ error: 'Failed to verify blockchain transaction.' }, { status: 500 });
+            }
         }
 
         let uploadedImageUrl = image;

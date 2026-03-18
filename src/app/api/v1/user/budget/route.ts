@@ -23,7 +23,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
         }
 
-        // 2. Verify On-Chain Transaction (Stop Infinite Minting Flaw)
+        // 2. Verify On-Chain Transaction (Stop Infinite Minting Flaw & Replay Attacks)
         try {
             const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
             const receipt = await provider.getTransactionReceipt(txHash);
@@ -32,9 +32,17 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: 'Web3 Transaction failed or not found on Base mainnet.' }, { status: 400 });
             }
             
-            // OPENADS_VAULT_ADDRESS verification
+            // SECURITY: OPENADS_VAULT_ADDRESS verification
             if (receipt.to?.toLowerCase() !== '0xA16459A0282641CeA91B67459F0bAE2B5456B15F'.toLowerCase()) {
                 return NextResponse.json({ error: 'Invalid smart contract destination. Funds were not sent to the Vault.' }, { status: 400 });
+            }
+
+            // SECURITY: Transaction Sender Spoofing/Replay Protection!
+            // The sender of the transaction MUST exactly match the signer_wallet who authenticated this API request.
+            // This prevents attackers from copying someone else's valid txHash from Basescan and stealing their deposit credit.
+            if (receipt.from?.toLowerCase() !== signer_wallet.toLowerCase()) {
+                console.error(`[Security] Transaction Spoofing Attempt Blocked! API caller ${signer_wallet} attempted to claim txHash ${txHash} which originated from ${receipt.from}`);
+                return NextResponse.json({ error: 'Transaction Spoofing Blocked. The sender of the transaction does not match your wallet.' }, { status: 403 });
             }
         } catch (rpcErr) {
             console.error('[Security] RPC TxHash Verification Failed:', rpcErr);
