@@ -93,9 +93,11 @@ export async function POST(request: Request) {
         }
 
         if (existingApp && existingApp.length > 0) {
+            // Instead of throwing an error, we return success with a duplicate flag
+            // so the frontend can seamlessly move to Step 2 and show the snippet.
             return NextResponse.json(
-                { error: 'Duplicate App: You have already registered this domain.' }, 
-                { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+                { success: true, is_duplicate: true, app: existingApp[0] }, 
+                { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } }
             );
         }
 
@@ -107,9 +109,19 @@ export async function POST(request: Request) {
 
         if (error) {
             if (error.code === '23505') {
+                // If it hits the unique constraint (e.g. they registered name but different domain, or vice versa)
+                // We should fetch the existing app and return it so they can still get the snippet
+                const { data: fallbackApp } = await supabase
+                    .from('apps')
+                    .select('id, name, domain, created_at')
+                    .eq('publisher_wallet', wallet)
+                    .or(`name.eq."${name}",domain.eq."${domain}"`)
+                    .limit(1)
+                    .single();
+                
                 return NextResponse.json(
-                    { error: 'This App Name or Domain is already registered to a Publisher.' }, 
-                    { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+                    { success: true, is_duplicate: true, app: fallbackApp || { name, domain } }, 
+                    { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } }
                 );
             }
             throw error;
