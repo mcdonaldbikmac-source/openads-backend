@@ -60,9 +60,9 @@ export async function GET(request: Request) {
         if (position !== 'all') {
             filteredByPosition = campaigns.filter(camp => {
                 const types = camp.ad_type || '';
-                if (position === 'top' || position === 'bottom') return types.includes('320x50');
-                if (position === 'popup') return types.includes('300x250');
-                if (position === 'floating') return types.includes('64x64');
+                if (position === 'top' || position === 'bottom') return types.includes('320x50') || types.includes('responsive');
+                if (position === 'popup') return types.includes('300x250') || types.includes('64x64') || types.includes('responsive');
+                if (position === 'floating') return types.includes('64x64') || types.includes('responsive');
                 return true;
             });
         }
