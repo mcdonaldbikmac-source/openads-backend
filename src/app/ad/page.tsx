@@ -6,10 +6,9 @@ import { useSearchParams } from 'next/navigation';
 function AdFrameContent() {
     const searchParams = useSearchParams();
     const publisherWallet = searchParams.get('publisher');
-    // BACKWARDS COMPATIBILITY: If the publisher is using an older iframe snippet that only passes ?publisher=xxx
-    // We automatically infer a 'responsive' placement so the ad continues to serve without requiring an app update!
+    // BACKWARDS COMPATIBILITY: Relax position default to 'all' so legacy snippets can still serve Pop up icons and highest-bidding ads.
     const placementId = searchParams.get('placement') || (publisherWallet ? `responsive-${publisherWallet}` : null);
-    const position = searchParams.get('position') || 'bottom';
+    const position = searchParams.get('position') || 'all';
     const clientType = searchParams.get('client_type') || 'web';
     const fid = searchParams.get('fid') ? parseInt(searchParams.get('fid') as string, 10) : 0;
 
