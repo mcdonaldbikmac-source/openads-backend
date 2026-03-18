@@ -11,6 +11,7 @@ function AdFrameContent() {
     const position = searchParams.get('position') || 'all';
     const clientType = searchParams.get('client_type') || 'web';
     const fid = searchParams.get('fid') ? parseInt(searchParams.get('fid') as string, 10) : 0;
+    const isPreview = searchParams.get('preview') === 'true';
 
     const [adData, setAdData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -24,11 +25,12 @@ function AdFrameContent() {
 
         async function fetchAd() {
             try {
-                const res = await fetch(`/api/v1/ad/decide?placement=${placementId}&position=${position}&t=${Date.now()}`);
+                const res = await fetch(`/api/v1/serve/decide?placement=${placementId}&position=${position}&t=${Date.now()}`);
                 if (!res.ok) throw new Error('API unreachable');
                 const data = await res.json();
                 
-                if (data.ad && !sessionStorage.getItem(`openads_closed_${data.ad.id}`)) {
+                // Bypass sessionStorage check if testing via preview mode
+                if (data.ad && (isPreview || !sessionStorage.getItem(`openads_closed_${data.ad.id}`))) {
                     setAdData(data.ad);
                     // Resize postMessage is now triggered via the img onLoad handler below
                 } else {
@@ -61,7 +63,7 @@ function AdFrameContent() {
                             observer.disconnect();
                             
                             // Log cryptographically signed verified impression
-                            fetch('/api/v1/ad/track', {
+                            fetch('/api/v1/serve/track', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -108,7 +110,7 @@ function AdFrameContent() {
         }, '*');
         
         // 2. Track click synchronously in background
-        fetch('/api/v1/ad/track', {
+        fetch('/api/v1/serve/track', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
