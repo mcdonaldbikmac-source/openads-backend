@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -22,13 +27,35 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // 1. Authenticate with EIP-191 Signature (SIWE) to prevent XSS hijacking
-        if (signature !== 'MVP_FARCASTER_BYPASS_SIG') {
+        // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+            // SIWF Bearer Token Verification (Farcaster AuthKit)
+            const { nonce } = body;
+            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
+            
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: body.message,
+                    signature: signature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                
+                if (!result.success || result.fid.toString() !== publisherWallet) {
+                    console.error(`[Security] App Deletion SIWF IDOR Attempt. Expected FID: ${publisherWallet}`);
+                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                console.error('[Security] App Deletion SIWF Exception:', err);
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
+            }
+        } else {
+            // Web3 SIWE Verification (Ethers.js)
             try {
                 const expectedMessage = `Sign to permanently delete app ${appId}`;
                 let recoveredAddress;
                 
-                if (body.message && body.message !== 'MVP_FARCASTER_BYPASS_MSG') {
+                if (body.message) {
                     recoveredAddress = ethers.verifyMessage(body.message, signature);
                 } else {
                     recoveredAddress = ethers.verifyMessage(expectedMessage, signature);

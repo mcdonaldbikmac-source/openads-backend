@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 export async function POST(request: Request) {
     try {
@@ -15,7 +20,7 @@ export async function POST(request: Request) {
         // SECURITY UPDATE: Prevent Pre-Registration Referral Hijacking
         // If the wallet is a Web3 custody address (0x...), it MUST be cryptographically proven
         // to prevent attackers from mass-registering unjoined wallets under their referral tree.
-        // Farcaster FIDs (numeric) are exempt here as they can't receive USDC without linking a 0x wallet later.
+        // Farcaster FIDs (numeric) MUST also be cryptographically proven via SIWF Bearer tokens.
         // =========================================================================
         if (String(wallet).startsWith('0x')) {
             if (!signature) {
@@ -29,6 +34,27 @@ export async function POST(request: Request) {
             } catch (err) {
                 console.error('[Security] Failed to verify SIWE on Login:', err);
                 return NextResponse.json({ error: 'Invalid authentication signature.' }, { status: 401 });
+            }
+        } else {
+            // FARCASTER SIWF VERIFICATION
+            const { message, nonce } = body;
+            if (!signature || !message || !nonce) {
+                return NextResponse.json({ error: 'Farcaster SIWF Cryptographic payload missing for Login.' }, { status: 401 });
+            }
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: message,
+                    signature: signature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                if (!result.success || result.fid.toString() !== wallet) {
+                    console.error(`[Security] Farcaster SIWF Referral Hijack Attempt. Expected FID: ${wallet}`);
+                    return NextResponse.json({ error: 'Farcaster Authentication Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                console.error('[Security] Failed to verify SIWF on Login:', err);
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
             }
         }
 

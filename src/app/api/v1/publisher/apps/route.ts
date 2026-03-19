@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 // GET: Fetch all registered miniapps/websites for a given publisher wallet
 export async function GET(request: Request) {
@@ -54,14 +59,35 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields including signature' }, { status: 400 });
         }
 
-        // 1. Authenticate with EIP-191 Signature
-        if (signature !== 'MVP_FARCASTER_BYPASS_SIG') {
+        // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+            // SIWF Bearer Token Verification (Farcaster AuthKit)
+            const { nonce } = body;
+            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
+            
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: body.message,
+                    signature: signature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                
+                if (!result.success || result.fid.toString() !== wallet) {
+                    console.error(`[Security] App Registration SIWF Hijack Attempt. Expected FID: ${wallet}`);
+                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                console.error('[Security] App Registration SIWF Exception:', err);
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
+            }
+        } else {
+            // Web3 SIWE Verification (Ethers.js)
             try {
                 const expectedMessage = `Sign to register domain ${domain} for publisher ${wallet}`;
                 let recoveredAddress;
                 
-                if (body.message && body.message !== 'MVP_FARCASTER_BYPASS_MSG') {
-                    // Farcaster Auth loop bypass using original SIWE message
+                if (body.message) {
                     recoveredAddress = ethers.verifyMessage(body.message, signature);
                 } else {
                     recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
@@ -91,6 +117,20 @@ export async function POST(request: Request) {
         const lowerDomain = domain.toLowerCase();
         if (lowerDomain.includes('farcaster.xyz/miniapp') || lowerDomain.includes('warpcast.com/~/')) {
             return NextResponse.json({ error: 'Farcaster wrapper links are not permitted as they break Sandbox origin verification. Please enter your actual physical hosting domain (e.g., vercel.app).' }, { status: 400 });
+        }
+
+        // Infrastructure Domain Hijacking Blacklist
+        const INFRASTRUCTURE_BLACKLIST = [
+            'openads-backend.vercel.app',
+            'mcdonaldbikmac-source',
+            'openads.network',
+            'farcaster.network'
+        ];
+        for (const blacklisted of INFRASTRUCTURE_BLACKLIST) {
+            if (lowerDomain.includes(blacklisted)) {
+                console.warn(`[Security] Attempted Infrastructure Hijack blocked: ${domain}`);
+                return NextResponse.json({ error: 'System architecture domains cannot be registered into the public ad network.' }, { status: 403 });
+            }
         }
 
         // Anti-Spam Check: Limit to 3 apps per publisher wallet

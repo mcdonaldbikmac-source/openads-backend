@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
-
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 // PATCH: Toggle App Pause State (without schema migrations)
 export async function PATCH(request: Request) {
@@ -13,13 +17,35 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'Missing required parameters (id, wallet, action, signature)' }, { status: 400 });
         }
         
-        // 1. Authenticate with EIP-191 Signature (SIWE)
-        if (signature !== 'MVP_FARCASTER_BYPASS_SIG') {
+        // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+            // SIWF Bearer Token Verification (Farcaster AuthKit)
+            const { nonce } = body;
+            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
+            
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: body.message,
+                    signature: signature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                
+                if (!result.success || result.fid.toString() !== wallet) {
+                    console.error(`[Security] App Toggle SIWF Sabotage Attempt. Expected FID: ${wallet}`);
+                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                console.error('[Security] App Toggle SIWF Exception:', err);
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
+            }
+        } else {
+            // Web3 SIWE Verification (Ethers.js)
             try {
                 const expectedMessage = `Sign to ${action} app ${id}`;
                 let recoveredAddress;
                 
-                if (body.message && body.message !== 'MVP_FARCASTER_BYPASS_MSG') {
+                if (body.message) {
                     recoveredAddress = ethers.verifyMessage(body.message, signature);
                 } else {
                     recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
