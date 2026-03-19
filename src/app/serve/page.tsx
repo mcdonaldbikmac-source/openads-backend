@@ -191,15 +191,10 @@ function AdFrameContent() {
                 alignItems: 'center', 
                 overflow: 'hidden', 
                 borderRadius: borderRadius, 
-                margin: isFloating64 ? '0' : '0 auto', 
+                margin: '0 auto', 
                 background: 'transparent',
-                position: isFloating64 ? 'fixed' : 'relative',
-                top: isFloating64 ? '20px' : 'auto',
-                right: isFloating64 ? '20px' : 'auto',
-                bottom: 'auto',
-                left: 'auto',
-                textDecoration: 'none',
-                boxShadow: isFloating64 ? '0 4px 12px rgba(0,0,0,0.15)' : 'none'
+                position: 'relative',
+                textDecoration: 'none'
             }}
         >
             {/* Overlay Buttons */}
