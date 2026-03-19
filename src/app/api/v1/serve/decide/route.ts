@@ -66,8 +66,8 @@ export async function GET(request: Request) {
                 return false;
             }
 
-            // 2. Legacy position enforcement (if present)
-            if (position !== 'all') {
+            // 2. Legacy position enforcement (if present, bypassed for responsive wildcards)
+            if (position !== 'all' && requestedFormat !== 'responsive') {
                 if (position === 'top' || position === 'bottom') return types.includes('320x50') || types.includes('responsive');
                 if (position === 'popup') return types.includes('300x250') || types.includes('responsive');
                 if (position === 'floating') return types.includes('64x64') || types.includes('responsive');
