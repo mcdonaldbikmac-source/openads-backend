@@ -115,20 +115,10 @@ function AdFrameContent() {
         return () => observer.disconnect();
     }, [adData, hasTrackedImpression, placementId, publisherWallet, clientType, fid]);
 
-    const handleClick = () => {
+    const handleClick = (e: React.MouseEvent) => {
         if (!adData) return;
         
-        // 1. Execute redirect to the advertiser's landing page in a new secure tab.
-        // Farcaster WebViews natively handle _blank by opening the device's default browser perfectly.
-        window.open(adData.url, '_blank', 'noopener,noreferrer');
-        
-        // Ensure graceful fallback notification for publishers who happen to still be running legacy sdk.js
-        window.parent.postMessage({
-            type: 'OPENADS_CLICK',
-            url: adData.url
-        }, '*');
-        
-        // 2. Track click synchronously in background
+        // Track the click synchronously while the native browser handles the Anchor <a> routing mechanism
         fetch('/api/v1/serve/pulse', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -142,8 +132,14 @@ function AdFrameContent() {
                 sig: 'verified_origin',
                 message: `click:${adData.id}:${placementId}:${publisherWallet}`
             }),
-            keepalive: true // Crucial for navigating away
+            keepalive: true // Crucial for navigating away smoothly
         }).catch(console.error);
+        
+        // Ensure graceful fallback notification for publishers who happen to still be running legacy framework logic
+        window.parent.postMessage({
+            type: 'OPENADS_CLICK',
+            url: adData.url
+        }, '*');
     };
 
     if (loading || !adData) return null;
@@ -164,8 +160,11 @@ function AdFrameContent() {
     }
 
     return (
-        <div 
-            ref={containerRef}
+        <a 
+            href={adData.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            ref={containerRef as any}
             onClick={handleClick}
             style={{ 
                 width: width, 
@@ -179,7 +178,8 @@ function AdFrameContent() {
                 borderRadius: borderRadius, 
                 margin: '0 auto', 
                 background: 'transparent',
-                position: 'relative'
+                position: 'relative',
+                textDecoration: 'none'
             }}
         >
             {/* Overlay Buttons */}
@@ -242,7 +242,7 @@ function AdFrameContent() {
                     borderRadius: borderRadius 
                 }} 
             />
-        </div>
+        </a>
     );
 }
 
