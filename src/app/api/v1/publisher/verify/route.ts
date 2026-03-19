@@ -21,19 +21,15 @@ export async function POST(request: Request) {
         }
 
         const expectedMessage = `Verify OpenAds Domain\nTimestamp: ${timestamp}\nWallet: ${wallet.toLowerCase()}`;
-        
-        // UX GRACE FALLBACK: For the MVP, if the user structurally cannot sign (No MetaMask or Mobile), allow fallback.
-        if (signature && !signature.includes('GRACE_FALLBACK')) {
-            try {
-                const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-                if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
-                    console.warn(`[Security] Signature spoof detected. Expected: ${wallet}, Recovered: ${recoveredAddress}`);
-                    return NextResponse.json({ error: 'Cryptographic verification structurally failed.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
-                }
-            } catch (sigErr) {
-                console.error('[Security] Malformed Signature Array:', sigErr);
-                // Non-fatal for MVP Grace Fallback
+        try {
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                console.warn(`[Security] Signature spoof detected. Expected: ${wallet}, Recovered: ${recoveredAddress}`);
+                return NextResponse.json({ error: 'Cryptographic verification structurally failed.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
             }
+        } catch (sigErr) {
+            console.error('[Security] Malformed Signature Array:', sigErr);
+            return NextResponse.json({ error: 'Invalid Web3 Signature structure.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
         // LAYER 1: STRICT TELEMETRY CHECK
