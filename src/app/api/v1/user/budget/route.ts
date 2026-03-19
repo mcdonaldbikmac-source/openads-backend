@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 export async function POST(request: Request) {
     try {
@@ -11,19 +16,50 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid or missing parameters (campaign_id, amount, signature, txHash)' }, { status: 400 });
         }
 
-        // 1. Authenticate with EIP-191 Signature
-        try {
-            const expectedMessage = `Sign to add $${amount} to campaign ${campaign_id}`;
-            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-            if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
-                throw new Error("Signature mismatch");
+        // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+            const { nonce } = body;
+            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: body.message,
+                    signature: signature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                if (!result.success || result.fid.toString() !== signer_wallet) {
+                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
             }
-        } catch (authErr) {
-            console.error('[Security] Budget Addition SIWE Failed:', authErr);
-            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+        } else {
+            try {
+                const expectedMessage = `Sign to add $${amount} to campaign ${campaign_id}`;
+                const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+                if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
+                    throw new Error("Signature mismatch");
+                }
+            } catch (authErr) {
+                console.error('[Security] Budget Addition SIWE Failed:', authErr);
+                return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+            }
         }
 
-        // 2. Verify On-Chain Transaction (Stop Infinite Minting Flaw & Replay Attacks)
+        // 2. Double-Spend Replay Attack Protection (Idempotency Ledger)
+        const { data: existingTx } = await supabase
+            .from('vouchers')
+            .select('code')
+            .eq('code', txHash)
+            .single();
+
+        if (existingTx) {
+            console.error(`[Security] Replay Attack Blocked! txHash ${txHash} was already consumed.`);
+            return NextResponse.json({ error: 'Transaction has already been used. Double-Spend Blocked.' }, { status: 403 });
+        }
+
+        // 3. Verify On-Chain Transaction & MATHEMATICALLY EXTRACT USDC TRANSFER VALUE
+        let amountWeiFromBlockchain = BigInt(0);
         try {
             const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
             const receipt = await provider.getTransactionReceipt(txHash);
@@ -32,17 +68,30 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: 'Web3 Transaction failed or not found on Base mainnet.' }, { status: 400 });
             }
             
-            // SECURITY: OPENADS_VAULT_ADDRESS verification
-            if (receipt.to?.toLowerCase() !== '0xA16459A0282641CeA91B67459F0bAE2B5456B15F'.toLowerCase()) {
-                return NextResponse.json({ error: 'Invalid smart contract destination. Funds were not sent to the Vault.' }, { status: 400 });
-            }
-
-            // SECURITY: Transaction Sender Spoofing/Replay Protection!
-            // The sender of the transaction MUST exactly match the signer_wallet who authenticated this API request.
-            // This prevents attackers from copying someone else's valid txHash from Basescan and stealing their deposit credit.
+            // SECURITY: Transaction Sender Spoofing Protection!
             if (receipt.from?.toLowerCase() !== signer_wallet.toLowerCase()) {
                 console.error(`[Security] Transaction Spoofing Attempt Blocked! API caller ${signer_wallet} attempted to claim txHash ${txHash} which originated from ${receipt.from}`);
                 return NextResponse.json({ error: 'Transaction Spoofing Blocked. The sender of the transaction does not match your wallet.' }, { status: 403 });
+            }
+
+            // CRITICAL: Extract TRUE Transferred Value from USDC ERC20 Logs (Zero-Cost Minting Mitigation)
+            const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'.toLowerCase();
+            const VAULT_ADDRESS = '0xA16459A0282641CeA91B67459F0bAE2B5456B15F'.toLowerCase();
+            const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+            for (const log of receipt.logs) {
+                if (log.address.toLowerCase() === USDC_ADDRESS && log.topics[0] === TRANSFER_TOPIC) {
+                    const toAddressPadded = log.topics[2];
+                    if (toAddressPadded && toAddressPadded.toLowerCase().endsWith(VAULT_ADDRESS.substring(2))) {
+                        // Found the transfer to the OpenAdsVault! Decode the real amount.
+                        amountWeiFromBlockchain = BigInt(log.data);
+                        break;
+                    }
+                }
+            }
+
+            if (amountWeiFromBlockchain <= BigInt(0)) {
+                return NextResponse.json({ error: 'No USDC was successfully transferred to the OpenAds Vault in this transaction.' }, { status: 400 });
             }
         } catch (rpcErr) {
             console.error('[Security] RPC TxHash Verification Failed:', rpcErr);
@@ -60,17 +109,23 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
         }
 
-        // 2. Authorize that the signer actually owns this campaign before inflating budget
+        // 4. Authorize that the signer actually owns this campaign before inflating budget
         if (campaign.advertiser_wallet.toLowerCase() !== signer_wallet.toLowerCase()) {
             console.warn(`[Security] Wallet ${signer_wallet} tried to inflate budget for campaign owned by ${campaign.advertiser_wallet}`);
             return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }
 
-        // Add amount to budget_wei (amount is in USD string, we convert using ethers parsing equivalent)
-        // Assume amount is passed as a normal number formatted as USDC (18 decimals for our mock)
-        const amountWei = ethers.parseUnits(amount.toString(), 18);
+        // Lock the txHash as CONSUMED in the ledger
+        await supabase.from('vouchers').insert([{
+            code: txHash,
+            amount: Number(ethers.formatUnits(amountWeiFromBlockchain, 6)),
+            is_used: true,
+            used_by_wallet: signer_wallet
+        }]);
+
+        // Add dynamically extracted mathematical amount to budget_wei
         const currentBudgetWei = BigInt(String(campaign.budget_wei || '0').split('.')[0]);
-        const newBudgetWei = currentBudgetWei + amountWei;
+        const newBudgetWei = currentBudgetWei + amountWeiFromBlockchain;
 
         const updatePayload: any = { budget_wei: newBudgetWei.toString() };
         

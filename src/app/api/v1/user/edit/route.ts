@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
-
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 export async function POST(request: Request) {
     try {
@@ -12,16 +16,41 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required parameters including signature for authentication' }, { status: 400 });
         }
 
-        // 1. Authenticate with EIP-191 Signature
-        try {
-            const expectedMessage = `Sign to edit campaign ${campaign_id}`;
-            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-            if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
-                throw new Error("Signature mismatch");
+        // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+            const { nonce } = body;
+            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: body.message,
+                    signature: signature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                if (!result.success || result.fid.toString() !== signer_wallet) {
+                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
             }
-        } catch (authErr) {
-            console.error('[Security] Edit Campaign SIWE Failed:', authErr);
-            return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+        } else {
+            try {
+                const expectedMessage = `Sign to edit campaign ${campaign_id}`;
+                let recoveredAddress;
+                // Maintain backwards compatibility if frontend signed raw messages
+                try {
+                    recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+                } catch(e) {
+                    recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, signature);
+                }
+                
+                if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
+                    throw new Error("Signature mismatch");
+                }
+            } catch (authErr) {
+                console.error('[Security] Edit Campaign SIWE Failed:', authErr);
+                return NextResponse.json({ error: 'Cryptographic authentication failed. Invalid signature.' }, { status: 401 });
+            }
         }
 
         // 2. Authorize that the signer actually owns this campaign
@@ -49,6 +78,13 @@ export async function POST(request: Request) {
             }
 
             const mimeType = matches[1];
+            // STORED XSS MITIGATION: Strictly whitelist allowed image MIME types. Block SVG, HTML, etc.
+            const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedMimeTypes.includes(mimeType.toLowerCase())) {
+                console.warn(`[Security] Blocked malicious CDN MIME type upload attempt: ${mimeType}`);
+                return NextResponse.json({ error: 'Invalid image format. Only JPG, PNG, GIF, and WEBP are allowed.' }, { status: 400 });
+            }
+
             const base64Data = matches[2];
             const buffer = Buffer.from(base64Data, 'base64');
 

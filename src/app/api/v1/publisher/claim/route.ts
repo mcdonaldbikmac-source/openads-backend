@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
-
 import { ethers } from 'ethers';
+import { createAppClient, viemConnector } from '@farcaster/auth-client';
+
+const appClient = createAppClient({
+    ethereum: viemConnector(),
+});
 
 const SIGNER_PRIVATE_KEY = process.env.SIGNER_PRIVATE_KEY || '0x0000000000000000000000000000000000000000000000000000000000000001'; // Fallback for local testing
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -15,16 +19,40 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing wallet or signature parameter' }, { status: 400 });
         }
 
-        // 1. Authenticate with EIP-191 Signature (SIWE)
-        try {
-            const expectedMessage = `Sign to authorize withdrawal for ${wallet}`;
-            const recoveredAddress = ethers.verifyMessage(expectedMessage, clientSignature);
-            if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
-                throw new Error("Signature mismatch");
+        // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+            const { nonce } = body;
+            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
+            try {
+                const result = await appClient.verifySignInMessage({
+                    message: body.message,
+                    signature: clientSignature as `0x${string}`,
+                    domain: 'openads-backend.vercel.app',
+                    nonce: nonce,
+                });
+                if (!result.success || result.fid.toString() !== wallet) {
+                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                }
+            } catch (err) {
+                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
             }
-        } catch (authErr) {
-            console.error('[Security] Payout SIWE Failed:', authErr);
-            return NextResponse.json({ error: 'Cryptographic authentication failed.' }, { status: 401 });
+        } else {
+            try {
+                const expectedMessage = `Sign to authorize withdrawal for ${wallet}`;
+                let recoveredAddress;
+                // Maintain backwards compatibility
+                try {
+                    recoveredAddress = ethers.verifyMessage(expectedMessage, clientSignature);
+                } catch(e) {
+                    recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, clientSignature);
+                }
+                if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                    throw new Error("Signature mismatch");
+                }
+            } catch (authErr) {
+                console.error('[Security] Payout SIWE Failed:', authErr);
+                return NextResponse.json({ error: 'Cryptographic authentication failed.' }, { status: 401 });
+            }
         }
 
         // 2. Fetch current publisher stats
