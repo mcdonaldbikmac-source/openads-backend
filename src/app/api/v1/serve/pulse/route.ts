@@ -119,6 +119,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
         }
 
+        // ===============================================
+        // VULNERABILITY N: THE 'COSMETIC VERIFICATION' FIX
+        // Ensure that Impressions and Clicks are STRICTLY REJECTED if the Publisher has not passed Verification.
+        // Connect events (System Pings) are permitted to allow the Crawler to handshake properly.
+        // ===============================================
+        const normalizedEvent = event === 'view' ? 'impression' : event;
+        
+        if (publisherApp.logo_url !== 'verified' && normalizedEvent !== 'connect') {
+            console.warn(`[Security] Blocked Billable Event (${normalizedEvent}) from UNVERIFIED Domain: ${requestHost}`);
+            return NextResponse.json({ error: 'Domain is registered but NOT Verified. Telemetry rejected.' }, { status: 403 });
+        }
+
         // =========================================================================
         // DATABASE INSERTION (Must happen AFTER Security Checks!)
         // =========================================================================
