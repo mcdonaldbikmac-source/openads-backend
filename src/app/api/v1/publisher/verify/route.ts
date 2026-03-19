@@ -11,11 +11,13 @@ export async function GET(request: Request) {
         }
 
         // LAYER 1: STRICT TELEMETRY CHECK
-        // Check if the snippet actually pinged the backend via tracking_events recently.
+        // Use strict .eq() with lowercase to prevent explosive Seq Scans on massive event tables
+        const safeWallet = wallet.trim().toLowerCase();
+        
         const { data: trackData, error: trackError } = await supabase
             .from('tracking_events')
             .select('id')
-            .ilike('publisher_wallet', wallet)
+            .eq('publisher_wallet', safeWallet)
             .limit(1);
 
         if (trackError) {
@@ -26,13 +28,11 @@ export async function GET(request: Request) {
         let status = (trackData && trackData.length > 0) ? 'active' : 'waiting';
 
         // LAYER 2: HTTP CRAWLER FALLBACK (UX OPTIMIZATION)
-        // If the user deployed the code but hasn't manually visited their site to trigger Layer 1,
-        // we proactively scrape their domain's HTML to visually confirm the iframe's presence.
         if (status === 'waiting') {
             const { data: appData } = await supabase
                 .from('apps')
-                .select('domain')
-                .ilike('publisher_wallet', wallet)
+                .select('id, domain')
+                .eq('publisher_wallet', safeWallet)
                 .order('created_at', { ascending: false })
                 .limit(1);
 
@@ -41,7 +41,17 @@ export async function GET(request: Request) {
                     let checkUrl = appData[0].domain;
                     if (!checkUrl.startsWith('http')) checkUrl = 'https://' + checkUrl;
                     
-                    // Add a timeout to prevent Serverless hanging
+                    // ===============================================
+                    // SSRF VULNERABILITY MITIGATION:
+                    // Block internal AWS/Vercel network scraping
+                    // ===============================================
+                    const urlObj = new URL(checkUrl);
+                    const hostname = urlObj.hostname.toLowerCase();
+                    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '169.254.169.254' || hostname.startsWith('10.') || hostname.startsWith('192.168.')) {
+                        console.warn(`[SSRF Blocked] Malicious domain scan attempted: ${checkUrl}`);
+                        return NextResponse.json({ status: 'error', message: 'Internal domain scanning blocked for security.' });
+                    }
+                    
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 4000);
                     
@@ -54,10 +64,15 @@ export async function GET(request: Request) {
                     
                     if (htmlRes.ok) {
                         const htmlText = await htmlRes.text();
-                        // Look for the openads iframe src or the wallet address in the raw HTML payload
                         const lowerHtml = htmlText.toLowerCase();
-                        if (lowerHtml.includes('openads-backend') || lowerHtml.includes(wallet.toLowerCase())) {
-                            status = 'active'; // Crawler confirmed presence!
+                        if (lowerHtml.includes('openads-backend') || lowerHtml.includes(safeWallet)) {
+                            status = 'active'; 
+                            
+                            // UX GHOST FIX: Must persist crawler verification onto the app object so the Dashboard UI refreshes!
+                            await supabase
+                                .from('apps')
+                                .update({ logo_url: 'verified' })
+                                .eq('id', appData[0].id);
                         }
                     }
                 } catch (crawlErr) {
