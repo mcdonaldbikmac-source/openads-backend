@@ -172,6 +172,8 @@ function AdFrameContent() {
     const isResponsivePlacement = placementId && placementId.includes('responsive');
     const isFullScreenPopup = isResponsivePlacement && adData.size === '300x250';
 
+    const isFloating64 = position === 'floating' || adData.size === '64x64';
+
     const innerAdContent = (
         <a 
             href={adData.url}
@@ -189,10 +191,15 @@ function AdFrameContent() {
                 alignItems: 'center', 
                 overflow: 'hidden', 
                 borderRadius: borderRadius, 
-                margin: '0 auto', 
+                margin: isFloating64 ? '0' : '0 auto', 
                 background: 'transparent',
-                position: 'relative',
-                textDecoration: 'none'
+                position: isFloating64 ? 'fixed' : 'relative',
+                top: isFloating64 ? '20px' : 'auto',
+                right: isFloating64 ? '20px' : 'auto',
+                bottom: 'auto',
+                left: 'auto',
+                textDecoration: 'none',
+                boxShadow: isFloating64 ? '0 4px 12px rgba(0,0,0,0.15)' : 'none'
             }}
         >
             {/* Overlay Buttons */}
