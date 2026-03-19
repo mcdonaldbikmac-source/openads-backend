@@ -36,6 +36,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized to delete this app' }, { status: 403, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
+        // Preemptively cascade delete all relational telemetry logic (Foreign Key safeguard)
+        const { error: cascadeError } = await supabase
+            .from('tracking_events')
+            .delete()
+            .eq('app_id', appId);
+            
+        if (cascadeError) {
+            console.error('[API] FK Cascade Warning:', cascadeError);
+        }
+
         const { error: deleteError } = await supabase
             .from('apps')
             .delete()
