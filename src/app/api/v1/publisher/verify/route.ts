@@ -60,9 +60,15 @@ export async function GET(request: Request) {
                     const htmlRes = await fetch(checkUrl, { 
                         signal: controller.signal,
                         headers: { 'User-Agent': 'OpenAds-Verification-Bot/1.0' },
-                        cache: 'no-store'
+                        cache: 'no-store',
+                        redirect: 'manual' // Prevent SSRF Redirect Evasion (Scenario P)
                     });
                     clearTimeout(timeoutId);
+                    
+                    if (htmlRes.status === 301 || htmlRes.status === 302 || htmlRes.status === 307 || htmlRes.status === 308) {
+                        console.warn(`[Security] Crawler aborted to prevent SSRF Evasion. Redirects forbidden: ${checkUrl}`);
+                        return NextResponse.json({ status: 'error', message: 'Redirects are strictly forbidden during security verification.' });
+                    }
                     
                     if (htmlRes.ok) {
                         // Protect against Zip Bombs / OOM exploits by strictly buffering a maximum of 2MB
@@ -90,10 +96,15 @@ export async function GET(request: Request) {
                         }
                         
                         const lowerHtml = htmlText.toLowerCase();
-                        if (lowerHtml.includes('openads-backend') || lowerHtml.includes(safeWallet)) {
+                        
+                        // Strict Regex enforcement to prevent HTML Comment Bypasses (Scenario O)
+                        const hasIframeTag = /<iframe[^>]*src=["'][^"']*openads-backend\.vercel\.app\/serve/i.test(lowerHtml);
+                        const hasSafeWallet = new RegExp(`publisher=${safeWallet}`, 'i').test(lowerHtml);
+                        
+                        if (hasIframeTag && hasSafeWallet) {
                             status = 'active'; 
                             
-                            // UX GHOST FIX: Must persist crawler verification onto the app object so the Dashboard UI refreshes!
+                            // UX GHOST FIX: Persist verified status
                             await supabase
                                 .from('apps')
                                 .update({ logo_url: 'verified' })
