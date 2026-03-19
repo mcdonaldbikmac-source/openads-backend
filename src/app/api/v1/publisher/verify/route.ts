@@ -1,13 +1,35 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
+import { ethers } from 'ethers';
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
     try {
-        const { searchParams } = new URL(request.url);
-        const wallet = searchParams.get('wallet');
+        const body = await request.json().catch(() => ({}));
+        const { wallet, signature, timestamp } = body;
 
-        if (!wallet) {
-            return NextResponse.json({ error: 'Missing wallet parameter' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+        if (!wallet || !signature || !timestamp) {
+            return NextResponse.json({ error: 'Missing cryptographic payload (wallet, signature, timestamp)' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        // ===============================================
+        // VULNERABILITY L (DDoS Proxy Shield): ZERO-COST CRYPTO-SIG
+        // Enforce a strict 5-minute timestamp bound to prevent Signature Replay Attacks
+        // ===============================================
+        const now = Date.now();
+        if (now - parseInt(timestamp, 10) > 300000) {
+            return NextResponse.json({ error: 'Cryptographic signature expired. Please sign again.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const expectedMessage = `Verify OpenAds Domain\nTimestamp: ${timestamp}\nWallet: ${wallet.toLowerCase()}`;
+        try {
+            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+            if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                console.warn(`[Security] Signature spoof detected. Expected: ${wallet}, Recovered: ${recoveredAddress}`);
+                return NextResponse.json({ error: 'Cryptographic verification structurally failed.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+            }
+        } catch (sigErr) {
+            console.error('[Security] Malformed Signature Array:', sigErr);
+            return NextResponse.json({ error: 'Invalid Web3 Signature structure.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
         // LAYER 1: STRICT TELEMETRY CHECK
