@@ -52,6 +52,19 @@ export async function POST(request: Request) {
 
         if (client_type === 'farcaster') {
             console.log(`[OpenAds Backend API] 📱 Farcaster Mini App Traffic Detected: Extracting FID ${fid} for ad ${ad.id}`);
+            
+            // 🚨 ZERO-DAY MITIGATION PATCH: ENFORCE SIWF CRYPTOGRAPHY
+            const result = await appClient.verifySignInMessage({
+                message: message,
+                signature: sig as `0x${string}`,
+                domain: 'openads-backend.vercel.app',
+                nonce: nonce,
+            });
+            
+            if (!result.success) {
+                console.error(`[Security] CRITICAL: Fraudulent Farcaster Telemetry Signature Detected for FID: ${fid}`);
+                return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 401 });
+            }
         } else if (client_type === 'web') {
             console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected: Processing ad ${ad.id}`);
         } else {
