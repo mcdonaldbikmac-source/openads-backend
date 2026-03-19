@@ -111,6 +111,10 @@ export async function POST(request: Request) {
             .single();
 
         if (appError || !publisherApp) {
+            if (requestHost.includes('openads-backend')) {
+                 console.warn(`[Security] Referrer-Policy Masking Detected! The parent frame (Miniapp) is blocking Origin routing.`);
+                 return NextResponse.json({ error: 'Strict Referrer-Policy block detected. You must disable `no-referrer` headers on your Miniapp to authenticate telemetry from this domain.' }, { status: 403 });
+            }
             console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
             return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
         }
