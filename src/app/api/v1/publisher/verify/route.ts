@@ -25,7 +25,8 @@ export async function POST(request: Request) {
             const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
             if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
                 console.warn(`[Security] Signature spoof detected. Expected: ${wallet}, Recovered: ${recoveredAddress}`);
-                return NextResponse.json({ error: 'Cryptographic verification structurally failed.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+                // DIAGNOSTIC FIX: Expose the recovered address to the PM so mismatch vs corruption is provable via screenshot.
+                return NextResponse.json({ error: `Cryptographic structural mismatch. Expected: ${wallet.slice(0,6)}... Recovered: ${recoveredAddress.slice(0,6)}...` }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
             }
         } catch (sigErr) {
             console.error('[Security] Malformed Signature Array:', sigErr);
