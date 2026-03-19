@@ -114,13 +114,9 @@ export async function POST(request: Request) {
                     return NextResponse.json({ error: 'Web3 Transaction failed or not found on Base mainnet.' }, { status: 400 });
                 }
                 
-                // SECURITY: Transaction Sender Spoofing/Replay Protection!
-                if (receipt.from?.toLowerCase() !== signer_wallet.toLowerCase()) {
-                    console.error(`[Security] Zero-Cost Minting Blocked! API caller ${signer_wallet} attempted to claim txHash ${txHash} which originated from ${receipt.from}`);
-                    return NextResponse.json({ error: 'Transaction Spoofing Blocked. The sender of the transaction does not match your wallet.' }, { status: 403 });
-                }
-
-                // CRITICAL: Extract TRUE Transferred Value from USDC ERC20 Logs (Zero-Cost Minting Mitigation)
+                // CRITICAL SECURITY UPGRADE: ERC-4337 Smart Wallet Compatibility
+                // We cannot use `receipt.from === signer_wallet` because Coinbase Smart Wallets execute 
+                // via Bundler EOAs. Instead, we authenticate the funds natively inside the ERC20 log sequence.
                 let amountWeiFromBlockchain = BigInt(0);
                 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'.toLowerCase();
                 const VAULT_ADDRESS = '0xA16459A0282641CeA91B67459F0bAE2B5456B15F'.toLowerCase();
@@ -128,8 +124,13 @@ export async function POST(request: Request) {
 
                 for (const log of receipt.logs) {
                     if (log.address.toLowerCase() === USDC_ADDRESS && log.topics[0] === TRANSFER_TOPIC) {
+                        const fromAddressPadded = log.topics[1]; 
                         const toAddressPadded = log.topics[2];
-                        if (toAddressPadded && toAddressPadded.toLowerCase().endsWith(VAULT_ADDRESS.substring(2))) {
+                        
+                        // ANTI-SPOOFING: Prove the USDC originated strictly from the signed wallet
+                        const isFromSigner = fromAddressPadded && fromAddressPadded.toLowerCase().endsWith(signer_wallet.toLowerCase().substring(2));
+
+                        if (toAddressPadded && toAddressPadded.toLowerCase().endsWith(VAULT_ADDRESS.substring(2)) && isFromSigner) {
                             amountWeiFromBlockchain = BigInt(log.data);
                             break;
                         }
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
                 }
 
                 if (amountWeiFromBlockchain <= BigInt(0)) {
-                    return NextResponse.json({ error: 'No USDC was successfully transferred to the OpenAds Vault in this transaction.' }, { status: 400 });
+                    return NextResponse.json({ error: 'No valid USDC transfer originating from your wallet was found in this transaction. (Spoofing Blocked)' }, { status: 400 });
                 }
 
                 validatedBudget = Number(ethers.formatUnits(amountWeiFromBlockchain, 6));
