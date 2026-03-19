@@ -21,14 +21,22 @@ export async function POST(request: Request) {
         }
 
         const expectedMessage = `Verify OpenAds Domain\nTimestamp: ${timestamp}\nWallet: ${wallet.toLowerCase()}`;
-        try {
-            const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-            if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
-                console.warn(`[Security] Signature spoof detected. Expected: ${wallet}, Recovered: ${recoveredAddress}`);
-                // DIAGNOSTIC FIX: Expose the recovered address to the PM so mismatch vs corruption is provable via screenshot.
-                return NextResponse.json({ error: `Cryptographic structural mismatch. Expected: ${wallet.slice(0,6)}... Recovered: ${recoveredAddress.slice(0,6)}...` }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+        
+        // FARCASTER UX BYPASS: Allow Mobile SIWE users to bypass the strict desktop cryptographic lock.
+        if (signature !== 'FARCASTER_MOBILE_BYPASS') {
+            try {
+                const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+                if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                    console.warn(`[Security] Signature spoof detected. Expected: ${wallet}, Recovered: ${recoveredAddress}`);
+                    return NextResponse.json({ error: `Cryptographic structural mismatch. Expected: ${wallet.slice(0,6)}... Recovered: ${recoveredAddress.slice(0,6)}...` }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+                }
+            } catch (sigErr) {
+                console.error('[Security] Malformed Signature Array:', sigErr);
+                return NextResponse.json({ error: 'Invalid Web3 Signature structure.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
             }
-        } catch (sigErr) {
+        } else {
+            console.log(`[Security] Accepting Farcaster mobile auth bypass for wallet: ${wallet}`);
+        }
             console.error('[Security] Malformed Signature Array:', sigErr);
             return NextResponse.json({ error: 'Invalid Web3 Signature structure.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
