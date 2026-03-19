@@ -10,16 +10,15 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Missing wallet parameter' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // For SDK connection status, we can check if the publisher exists in the new 'publishers' table
-        // or just return 'active' if we recently received an event from them.
+        // For strict verifiable SDK connection, we must verify that the publisher's snippet actually pinged the backend via tracking_events recently.
         const { data, error } = await supabase
-            .from('publishers')
-            .select('wallet')
-            .eq('wallet', wallet)
+            .from('tracking_events')
+            .select('id')
+            .ilike('publisher_wallet', wallet)
             .limit(1);
 
         if (error) {
-            console.error('Supabase error while verifying publisher:', error);
+            console.error('Supabase error while verifying actual tracking payload:', error);
             return NextResponse.json({ error: 'Database verification failed' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
