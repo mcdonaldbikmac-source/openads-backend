@@ -37,9 +37,6 @@ export async function POST(request: Request) {
         } else {
             console.log(`[Security] Accepting Farcaster mobile auth bypass for wallet: ${wallet}`);
         }
-            console.error('[Security] Malformed Signature Array:', sigErr);
-            return NextResponse.json({ error: 'Invalid Web3 Signature structure.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
-        }
 
         // LAYER 1: STRICT TELEMETRY CHECK
         // Require strict time-bound recency (24 hours) to prevent 'Forever Verified' state decay hacking
