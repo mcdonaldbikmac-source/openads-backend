@@ -120,11 +120,10 @@ export async function POST(request: Request) {
         }
 
         // ===============================================
-        // VULNERABILITY N: THE 'COSMETIC VERIFICATION' FIX
+        // VULNERABILITY N: THE 'COSMETIC Verification' FIX
         // Ensure that Impressions and Clicks are STRICTLY REJECTED if the Publisher has not passed Verification.
         // Connect events (System Pings) are permitted to allow the Crawler to handshake properly.
         // ===============================================
-        const normalizedEvent = event === 'view' ? 'impression' : event;
         
         if (publisherApp.logo_url !== 'verified' && normalizedEvent !== 'connect') {
             console.warn(`[Security] Blocked Billable Event (${normalizedEvent}) from UNVERIFIED Domain: ${requestHost}`);
