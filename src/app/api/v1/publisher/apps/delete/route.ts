@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         // Verify ownership before deleting
         const { data: appData, error: verifyError } = await supabase
             .from('apps')
-            .select('publisher')
+            .select('publisher_wallet')
             .eq('id', appId)
             .single();
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'App not found' }, { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        if (appData.publisher.toLowerCase() !== publisherWallet.toLowerCase() && appData.publisher !== publisherWallet.toString()) {
+        if (appData.publisher_wallet.toLowerCase() !== publisherWallet.toLowerCase() && appData.publisher_wallet !== publisherWallet.toString()) {
             return NextResponse.json({ error: 'Unauthorized to delete this app' }, { status: 403, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
