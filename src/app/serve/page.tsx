@@ -23,6 +23,25 @@ function AdFrameContent() {
     useEffect(() => {
         if (!placementId) return;
 
+        // Unconditional telemetry ping to guarantee backend connection validation even if Ad Inventory is perfectly empty (Scenario B fix)
+        fetch('/api/v1/serve/pulse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_type: clientType,
+                event: 'connect',
+                ad: { id: '00000000-0000-0000-0000-000000000000' }, // Dummy UUID, will be ignored by pulse route for 'connect' events
+                placement: placementId,
+                publisher: publisherWallet,
+                fid,
+                logo: searchParams.get('logo') || '',
+                sig: 'verified_origin',
+                message: `connect:${placementId}:${publisherWallet}`,
+                parent_url: document.referrer || window.location.href
+            }),
+            keepalive: true
+        }).catch(() => {});
+
         async function fetchAd() {
             try {
                 const res = await fetch(`/api/v1/serve/decide?placement=${placementId}&position=${position}&t=${Date.now()}`);

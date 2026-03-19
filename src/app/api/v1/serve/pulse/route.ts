@@ -77,7 +77,9 @@ export async function POST(request: Request) {
         let isValidDomain = true;
 
         // Normalize event name (SDK sends 'impression', RPC expects 'view')
-        const normalizedEvent = (event === 'impression' || event === 'view') ? 'view' : 'click';
+        let normalizedEvent = 'click';
+        if (event === 'impression' || event === 'view') normalizedEvent = 'view';
+        if (event === 'connect') normalizedEvent = 'connect';
 
         // MOCK SIG to satisfy strict DB validations that expect a 132-char hex string 
         const MOCK_WEB_SIG = '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
@@ -148,6 +150,21 @@ export async function POST(request: Request) {
             }]);
 
             if (error) console.error('Supabase Click Log Error:', error.message || error);
+        }
+        else if (normalizedEvent === 'connect') {
+            const safeFid = client_type === 'web' ? 0 : Number(fid);
+            const safeSig = (client_type === 'web' || sig === 'verified_origin') ? MOCK_WEB_SIG : sig;
+
+            // Log a synthetic connection heartbeat for verification (No campaign_id)
+            const { error } = await supabase.from('tracking_events').insert([{
+                campaign_id: null,
+                publisher_wallet: publisherApp.publisher_wallet,
+                fid: safeFid,
+                event_type: 'connect',
+                sig: safeSig
+            }]);
+
+            if (error) console.error('Supabase Connect Log Error:', error.message || error);
         }
 
         // =========================================================================
