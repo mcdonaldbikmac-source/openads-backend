@@ -27,10 +27,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Cryptographic authentication failed.' }, { status: 401 });
         }
 
-        // 1. Fetch current publisher stats
+        // 2. Fetch current publisher stats
         const { data: pubData, error: fetchErr } = await supabase
             .from('publishers')
-            .select('total_earned_wei')
+            .select('total_earned_wei, paid_out_wei')
             .eq('wallet', wallet)
             .single();
 
@@ -43,15 +43,21 @@ export async function POST(request: Request) {
         }
 
         // 3. Mark DB as claimed (Pending Confirmation)
-        const newPaidOut = pubData.total_earned_wei || 0;
+        const newPaidOut = pubData.total_earned_wei || '0';
+        const currentPaidOut = pubData.paid_out_wei || '0';
+        
+        // Calculate cryptographic delta to prevent DB locking race conditions
+        const pending = BigInt(newPaidOut) - BigInt(currentPaidOut);
 
-        const { error: updateErr } = await supabase
-            .from('publishers')
-            .update({ paid_out_wei: newPaidOut })
-            .eq('wallet', wallet);
+        if (pending > 0n) {
+            const { error: updateErr } = await supabase
+                .from('publishers')
+                .update({ paid_out_wei: newPaidOut })
+                .eq('wallet', wallet);
 
-        if (updateErr) {
-            return NextResponse.json({ error: 'Failed to update claim status' }, { status: 500 });
+            if (updateErr) {
+                return NextResponse.json({ error: 'Failed to update claim status' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+            }
         }
 
         // 4. Generate the Server-Side ECDSA Signature for the Smart Contract
