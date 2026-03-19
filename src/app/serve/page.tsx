@@ -51,6 +51,16 @@ function AdFrameContent() {
                 // Bypass sessionStorage check if testing via preview mode
                 if (data.ad && (isPreview || !sessionStorage.getItem(`openads_closed_${data.ad.id}`))) {
                     setAdData(data.ad);
+                    
+                    // Native Dimension Morphing Dispatch
+                    if (placementId && placementId.includes('responsive')) {
+                        const frameId = searchParams.get('frameId') || `openads-resp-${publisherWallet}`;
+                        if (data.ad.size === '64x64' || position === 'floating') {
+                            window.parent.postMessage({ morph: true, id: frameId, style: { position: 'fixed', top: '20px', right: '20px', width: '64px', height: '64px', borderRadius: '50%', zIndex: 2147483647, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minHeight: '64px', background: 'transparent' } }, '*');
+                        } else if (data.ad.size === '300x250' || position === 'popup') {
+                            window.parent.postMessage({ morph: true, id: frameId, style: { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', zIndex: 2147483647, background: 'rgba(0,0,0,0.5)', minHeight: '100vh' } }, '*');
+                        }
+                    }
                     // Resize postMessage is now triggered via the img onLoad handler below
                 } else {
                     // No ad available, or user closed this ad in this session
@@ -159,7 +169,10 @@ function AdFrameContent() {
         height = '100%';
     }
 
-    return (
+    const isResponsivePlacement = placementId && placementId.includes('responsive');
+    const isFullScreenPopup = isResponsivePlacement && adData.size === '300x250';
+
+    const innerAdContent = (
         <a 
             href={adData.url}
             target="_blank"
@@ -235,8 +248,8 @@ function AdFrameContent() {
                     }, '*');
                 }}
                 style={{ 
-                    maxWidth: '100%', 
-                    maxHeight: '100%', 
+                    width: '100%', 
+                    height: '100%', 
                     objectFit: 'cover', 
                     display: 'block', 
                     borderRadius: borderRadius 
@@ -244,6 +257,18 @@ function AdFrameContent() {
             />
         </a>
     );
+
+    if (isFullScreenPopup) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100vw', height: '100vh' }}>
+                <div style={{ position: 'relative', width: '300px', height: '250px', background: '#fff', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+                    {innerAdContent}
+                </div>
+            </div>
+        );
+    }
+
+    return innerAdContent;
 }
 
 export default function AdIframePage() {
