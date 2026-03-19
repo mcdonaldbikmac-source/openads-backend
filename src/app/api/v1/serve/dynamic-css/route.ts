@@ -65,7 +65,7 @@ export async function GET(request: Request) {
                 '    background: transparent !important;',
                 '    pointer-events: auto !important;',
                 '}'
-            ].join('\\n');
+            ].join('\n');
         } else if (types.includes('300x250')) {
             cssPayload = [
                 '.openads-frame {',
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
                 '    z-index: 2147483647 !important;',
                 '    background: transparent !important;',
                 '}'
-            ].join('\\n');
+            ].join('\n');
         } else if (types.includes('320x50')) {
             cssPayload = [
                 '.openads-frame {',
@@ -92,7 +92,7 @@ export async function GET(request: Request) {
                 '    margin: 0 auto !important;',
                 '    background: transparent !important;',
                 '}'
-            ].join('\\n');
+            ].join('\n');
         }
 
         return new NextResponse(cssPayload, {
