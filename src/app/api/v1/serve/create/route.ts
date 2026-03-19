@@ -80,40 +80,15 @@ export async function POST(request: Request) {
             }
         }
 
-        // 2. Voucher Redemption OR On-Chain Deposit Verification
+        // 2. On-Chain Deposit Verification
         let validatedBudget = Number(budget);
-        if (voucherCode) {
-            const { data: voucherData, error: voucherError } = await supabase
-                .from('vouchers')
-                .select('*')
-                .eq('code', voucherCode.trim().toUpperCase())
-                .eq('is_used', false)
-                .single();
+        
+        // NO VOUCHER ALLOWED: MUST Verify On-Chain Transaction & MATHEMATICALLY EXTRACT USDC TRANSFER VALUE
+        if (!txHash) {
+            return NextResponse.json({ error: 'Missing txHash. You must deposit USDC to the OpenAdsVault to create a campaign.' }, { status: 400 });
+        }
 
-            if (voucherError || !voucherData) {
-                return NextResponse.json({ error: 'Invalid or already used voucher code' }, { status: 400 });
-            }
-
-            // Atomically mark the voucher as used
-            const { error: updateError } = await supabase
-                .from('vouchers')
-                .update({ is_used: true, used_by_wallet: advertiser })
-                .eq('code', voucherCode.trim().toUpperCase());
-
-            if (updateError) {
-                console.error('Failed to consume voucher:', updateError);
-                return NextResponse.json({ error: 'Failed to redeem voucher to DB' }, { status: 500 });
-            }
-
-            // Note: If partial payments exist, the actual budget is the frontend claimed budget. 
-            // In a strict financial setup, budgetWei should be `Vault Deposit + VoucherAmount`.
-        } else {
-            // NO VOUCHER: MUST Verify On-Chain Transaction & MATHEMATICALLY EXTRACT USDC TRANSFER VALUE
-            if (!txHash) {
-                return NextResponse.json({ error: 'Missing txHash. You must deposit USDC to the OpenAdsVault to create a campaign.' }, { status: 400 });
-            }
-
-            // Double-Spend Replay Attack Protection (Idempotency Ledger)
+        // Double-Spend Replay Attack Protection (Idempotency Ledger)
             const { data: existingTx } = await supabase
                 .from('vouchers')
                 .select('code')
@@ -173,7 +148,6 @@ export async function POST(request: Request) {
                 console.error('[Security] RPC TxHash Verification Failed in Campaign Create:', rpcErr);
                 return NextResponse.json({ error: 'Failed to verify blockchain transaction.' }, { status: 500 });
             }
-        }
 
         let uploadedImageUrl = image;
         
