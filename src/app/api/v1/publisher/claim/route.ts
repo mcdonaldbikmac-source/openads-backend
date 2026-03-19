@@ -49,7 +49,7 @@ export async function POST(request: Request) {
         // Calculate cryptographic delta to prevent DB locking race conditions
         const pending = BigInt(newPaidOut) - BigInt(currentPaidOut);
 
-        if (pending > 0n) {
+        if (pending > BigInt(0)) {
             const { error: updateErr } = await supabase
                 .from('publishers')
                 .update({ paid_out_wei: newPaidOut })
