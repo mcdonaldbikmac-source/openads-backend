@@ -177,55 +177,46 @@ export async function POST(request: Request) {
 
         let uploadedImageUrl = image;
         
-        // The frontend sends image as a JSON string (e.g. {"320x50":"data:image/png;base64,..."})
-        let base64ImageToUpload = image;
         try {
             const parsedImages = JSON.parse(image);
             const formats = Object.keys(parsedImages);
+            const finalUrls: Record<string, string> = {};
+
             if (formats.length > 0) {
-                base64ImageToUpload = parsedImages[formats[0]]; // Take the first available cropped image
+                // Multi-Format Matrix Upload Protocol
+                for (const format of formats) {
+                    const base64ImageToUpload = parsedImages[format];
+                    if (base64ImageToUpload && base64ImageToUpload.startsWith('data:image')) {
+                        const matches = base64ImageToUpload.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+                        if (!matches || matches.length !== 3) continue;
+
+                        const mimeType = matches[1];
+                        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                        if (!allowedMimeTypes.includes(mimeType.toLowerCase())) continue;
+
+                        const base64Data = matches[2];
+                        const buffer = Buffer.from(base64Data, 'base64');
+                        const ext = mimeType.split('/')[1] || 'jpg';
+                        const fileName = `${advertiser.substring(0, 10)}_${format}_${Date.now()}.${ext}`;
+
+                        const { data: uploadData, error: uploadError } = await supabase.storage
+                            .from('ads')
+                            .upload(fileName, buffer, { contentType: mimeType, upsert: false });
+
+                        if (!uploadError) {
+                            const { data: { publicUrl } } = supabase.storage.from('ads').getPublicUrl(fileName);
+                            finalUrls[format] = publicUrl;
+                        }
+                    }
+                }
+                
+                // If any successful uploads occurred, overwrite the raw JSON string with the final CDN map
+                if (Object.keys(finalUrls).length > 0) {
+                    uploadedImageUrl = JSON.stringify(finalUrls);
+                }
             }
         } catch (e) {
-            // It's not a JSON string, assume it's a raw base64 string from an older version
-        }
-
-        if (base64ImageToUpload && base64ImageToUpload.startsWith('data:image')) {
-            const matches = base64ImageToUpload.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-            if (!matches || matches.length !== 3) {
-                return NextResponse.json({ error: 'Invalid base64 image data' }, { status: 400 });
-            }
-
-            const mimeType = matches[1];
-            // STORED XSS MITIGATION: Strictly whitelist allowed image MIME types. Block SVG and HTML.
-            const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            if (!allowedMimeTypes.includes(mimeType.toLowerCase())) {
-                console.warn(`[Security] Blocked malicious CDN MIME type upload attempt: ${mimeType}`);
-                return NextResponse.json({ error: 'Invalid image format. Only JPG, PNG, GIF, and WEBP are allowed.' }, { status: 400 });
-            }
-
-            const base64Data = matches[2];
-            const buffer = Buffer.from(base64Data, 'base64');
-
-            // Generate a unique filename using advertiser wallet prefix and timestamp
-            const ext = mimeType.split('/')[1] || 'jpg';
-            const fileName = `${advertiser.substring(0, 10)}_${Date.now()}.${ext}`;
-
-            // Upload directly from Buffer
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('ads')
-                .upload(fileName, buffer, {
-                    contentType: mimeType,
-                    upsert: false
-                });
-
-            if (uploadError) {
-                console.error('Supabase Storage Error:', uploadError);
-                return NextResponse.json({ error: 'Failed to upload ad image to CDN' }, { status: 500 });
-            }
-
-            // Retrieve the public URL
-            const { data: { publicUrl } } = supabase.storage.from('ads').getPublicUrl(fileName);
-            uploadedImageUrl = publicUrl;
+            // Legacy Backwards Compatibility: Payload is a raw URL or single Base64 string, inherently bypass URL mapping matrix.
         }
 
         // 2. Format financial data

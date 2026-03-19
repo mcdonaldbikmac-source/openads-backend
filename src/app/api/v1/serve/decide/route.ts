@@ -145,15 +145,25 @@ export async function GET(request: Request) {
         // We must parse it and extract the correct image for the requested placement.
         // =========================================================================
         let finalImageUrl = imageRow.image_url;
-        // requestedFormat already extracted at the top of the route logic
-
+        // If responsive or multiple sizes allowed, randomly or systematically pick one
+        let selectedSize = selectedCampaign.ad_type.split(',')[0].trim();
+        
         if (finalImageUrl && finalImageUrl.startsWith('{')) {
             try {
                 const parsedImages = JSON.parse(finalImageUrl);
-                // Default to the exact requested format, or fallback to the first available image
-                finalImageUrl = parsedImages[requestedFormat] || Object.values(parsedImages)[0] || finalImageUrl;
+                if (requestedFormat && parsedImages[requestedFormat]) {
+                    selectedSize = requestedFormat;
+                    finalImageUrl = parsedImages[requestedFormat];
+                } else {
+                    // Pick a random available size from the uploaded matrix
+                    const availableSizes = Object.keys(parsedImages);
+                    if (availableSizes.length > 0) {
+                        selectedSize = availableSizes[Math.floor(Math.random() * availableSizes.length)];
+                        finalImageUrl = parsedImages[selectedSize];
+                    }
+                }
             } catch {
-                // If it fails to parse, it's a legacy campaign containing just a raw string URL. Keep it.
+                // Legacy payload bypass
             }
         }
 
@@ -165,7 +175,7 @@ export async function GET(request: Request) {
             image: finalImageUrl,
             url: enforceSecureProtocol(selectedCampaign.creative_url),
             cpc: ethers.formatUnits(selectedCampaign.cpm_rate_wei.toString(), 6), // 6 decimals for USDC
-            size: selectedCampaign.ad_type
+            size: selectedSize
         };
 
         // CORS Headers are essential since the SDK will fetch this from external Mini App domains
