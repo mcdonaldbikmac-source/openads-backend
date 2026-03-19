@@ -11,13 +11,15 @@ export async function GET(request: Request) {
         }
 
         // LAYER 1: STRICT TELEMETRY CHECK
-        // Use strict .eq() with lowercase to prevent explosive Seq Scans on massive event tables
+        // Require strict time-bound recency (24 hours) to prevent 'Forever Verified' state decay hacking
         const safeWallet = wallet.trim().toLowerCase();
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         
         const { data: trackData, error: trackError } = await supabase
             .from('tracking_events')
             .select('id')
             .eq('publisher_wallet', safeWallet)
+            .gte('created_at', twentyFourHoursAgo)
             .limit(1);
 
         if (trackError) {
@@ -63,7 +65,30 @@ export async function GET(request: Request) {
                     clearTimeout(timeoutId);
                     
                     if (htmlRes.ok) {
-                        const htmlText = await htmlRes.text();
+                        // Protect against Zip Bombs / OOM exploits by strictly buffering a maximum of 2MB
+                        let htmlText = '';
+                        const reader = htmlRes.body?.getReader();
+                        const MAX_BYTES = 2 * 1024 * 1024; // 2MB Hard Limit
+                        let bytesRead = 0;
+                        
+                        if (reader) {
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
+                                if (value) {
+                                    bytesRead += value.length;
+                                    htmlText += new TextDecoder().decode(value);
+                                    if (bytesRead > MAX_BYTES) {
+                                        console.warn(`[Security] Abort: Malicious payload exceeded 2MB limit at ${checkUrl}`);
+                                        break; // Force Abort
+                                    }
+                                }
+                            }
+                        } else {
+                            htmlText = await htmlRes.text();
+                            htmlText = htmlText.substring(0, MAX_BYTES);
+                        }
+                        
                         const lowerHtml = htmlText.toLowerCase();
                         if (lowerHtml.includes('openads-backend') || lowerHtml.includes(safeWallet)) {
                             status = 'active'; 
