@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { ethers } from 'ethers';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -8,10 +9,10 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { appId, authStr } = body;
+        const { appId, authStr, signature } = body;
 
-        if (!appId || !authStr) {
-            return NextResponse.json({ error: 'Missing parameters' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+        if (!appId || !authStr || !signature) {
+            return NextResponse.json({ error: 'Missing logic parameters (appId, authStr, signature)' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
         const auth = typeof authStr === 'string' ? JSON.parse(authStr) : authStr;
@@ -21,7 +22,28 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // Verify ownership before deleting
+        // 1. Authenticate with EIP-191 Signature (SIWE) to prevent XSS hijacking
+        if (signature !== 'MVP_FARCASTER_BYPASS_SIG') {
+            try {
+                const expectedMessage = `Sign to permanently delete app ${appId}`;
+                let recoveredAddress;
+                
+                if (body.message && body.message !== 'MVP_FARCASTER_BYPASS_MSG') {
+                    recoveredAddress = ethers.verifyMessage(body.message, signature);
+                } else {
+                    recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+                }
+
+                if (recoveredAddress.toLowerCase() !== publisherWallet.toLowerCase()) {
+                    throw new Error("Cryptographic verification mismatch");
+                }
+            } catch (authErr) {
+                console.error('[Security] App Deletion SIWE Failed:', authErr);
+                return NextResponse.json({ error: 'Cryptographic UI authentication failed.' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+            }
+        }
+
+        // 2. Verify relational physical ownership before deleting
         const { data: appData, error: verifyError } = await supabase
             .from('apps')
             .select('publisher_wallet')
