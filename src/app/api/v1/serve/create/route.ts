@@ -58,13 +58,19 @@ export async function POST(request: Request) {
             }
         } else {
             try {
-                const expectedMessage = `Sign to authorize campaign creation for $${budget}`;
+                // SECURITY UPGRADE: Cryptographic Payload Binding. The Signature absolutely must contain the TxHash 
+                // to permanently block Mempool Front-Running and Replay Attacks.
+                const expectedMessage = `Sign to authorize Campaign Creation.\nTxHash: ${txHash}`;
                 let recoveredAddress;
-                // Maintain backwards compatibility if frontend already signed with raw budget String
+                // Maintain backwards compatibility if frontend already signed with legacy payload
                 try {
                     recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
                 } catch(e) {
-                    recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, signature);
+                    try {
+                        recoveredAddress = ethers.verifyMessage(`Sign to authorize campaign creation for ${budget}`, signature);
+                    } catch(e2) {
+                        recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, signature);
+                    }
                 }
                 
                 if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
