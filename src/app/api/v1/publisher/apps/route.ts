@@ -56,7 +56,12 @@ export async function POST(request: Request) {
         const { wallet, name, domain, app_type, signature } = body;
 
         if (!wallet || !name || !domain || !signature) {
-            return NextResponse.json({ error: 'Missing required fields including signature' }, { status: 400 });
+            const missing = [];
+            if (!wallet) missing.push('wallet');
+            if (!name) missing.push('name');
+            if (!domain) missing.push('domain');
+            if (!signature) missing.push('signature');
+            return NextResponse.json({ error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 });
         }
 
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
@@ -107,7 +112,8 @@ export async function POST(request: Request) {
         // EDGE CASE 2: Malformed Registration Data
         // ==========================================
         const ethRegex = /^0x[a-fA-F0-9]{40}$/;
-        if (!ethRegex.test(wallet)) {
+        const isFarcasterRequest = body.message && body.message.includes('farcaster.xyz');
+        if (!isFarcasterRequest && !ethRegex.test(wallet)) {
             return NextResponse.json({ error: 'Invalid Ethereum Wallet Address format.' }, { status: 400 });
         }
         

@@ -96,11 +96,15 @@ export async function GET(request: Request) {
         const selectedCampaign = eligibleCampaigns[0];
         const types = selectedCampaign.ad_type || '';
 
-        let cssPayload = '.openads-frame { display: none; }';
+        let cssPayload = '.openads-popup, .openads-floating, .openads-banner, .openads-frame { display: none !important; }';
 
+        // We iteratively build the CSS string to allow SIMULTANEOUS multi-format rendering
+        // based on the publisher's authorized array, rather than collapsing everything into a single ad.
+        const formatClasses = [];
+        
         if (types.includes('64x64')) {
-            cssPayload = [
-                '.openads-frame {',
+            formatClasses.push([
+                '.openads-floating {',
                 '    display: block !important;',
                 '    position: fixed !important;',
                 '    top: 20px !important;',
@@ -114,34 +118,49 @@ export async function GET(request: Request) {
                 '    background: transparent !important;',
                 '    pointer-events: auto !important;',
                 '}'
-            ].join('\n');
-        } else if (types.includes('300x250')) {
-            cssPayload = [
-                '.openads-frame {',
+            ].join('\n'));
+        } 
+        
+        if (types.includes('300x250')) {
+            formatClasses.push([
+                '.openads-popup {',
                 '    display: block !important;',
                 '    position: fixed !important;',
                 '    top: 50% !important;',
                 '    left: 50% !important;',
                 '    transform: translate(-50%, -50%) !important;',
-                '    width: 100vw !important;',
-                '    height: 100vh !important;',
+                '    width: 300px !important;',
+                '    height: 250px !important;',
+                '    border: 1px solid rgba(0,0,0,0.1) !important;',
+                '    z-index: 2147483647 !important;',
+                '    box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;',
+                '    background: transparent !important;',
+                '    pointer-events: auto !important;',
+                '}'
+            ].join('\n'));
+        } 
+        
+        if (types.includes('320x50')) {
+            formatClasses.push([
+                '.openads-banner {',
+                '    display: block !important;',
+                '    position: fixed !important;',
+                '    bottom: 0 !important;',
+                '    left: 50% !important;',
+                '    transform: translateX(-50%) !important;',
+                '    width: 100% !important;',
+                '    max-width: 320px !important;',
+                '    height: 50px !important;',
                 '    border: none !important;',
                 '    z-index: 2147483647 !important;',
                 '    background: transparent !important;',
+                '    pointer-events: auto !important;',
                 '}'
-            ].join('\n');
-        } else if (types.includes('320x50')) {
-            cssPayload = [
-                '.openads-frame {',
-                '    display: block !important;',
-                '    position: relative !important;',
-                '    width: 100% !important;',
-                '    height: 50px !important;',
-                '    border: none !important;',
-                '    margin: 0 auto !important;',
-                '    background: transparent !important;',
-                '}'
-            ].join('\n');
+            ].join('\n'));
+        }
+
+        if (formatClasses.length > 0) {
+           cssPayload = '.openads-popup, .openads-floating, .openads-banner, .openads-frame { display: none !important; }\n' + formatClasses.join('\n\n');
         }
 
         return new NextResponse(cssPayload, {

@@ -39,13 +39,31 @@ export async function PATCH(request: Request) {
                 console.error('[Security] App Toggle SIWF Exception:', err);
                 return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
             }
-        } else {
+        }
+        
+        let cachedApp = null;
+        if (!body.message || !body.message.includes('farcaster.xyz')) {
             // Web3 SIWE Verification (Ethers.js)
             try {
-                const expectedMessage = `Sign to update formats for app ${id}`;
+                // To reuse the Step 1 signature and eliminate double-signing UX friction,
+                // we must first fetch the registered App domain from Supabase.
+                const { data: currApp, error: fetchErr } = await supabase
+                    .from('apps')
+                    .select('app_type, domain')
+                    .eq('id', id)
+                    .eq('publisher_wallet', wallet)
+                    .single();
+
+                if (fetchErr || !currApp) {
+                    return NextResponse.json({ error: 'App not found or unauthorized' }, { status: 404 });
+                }
+                
+                cachedApp = currApp;
+
+                // Reconstruct the exact Step 1 Signature payload using the database domain
+                const expectedMessage = `Sign to register domain ${currApp.domain} for publisher ${wallet}`;
                 let recoveredAddress;
                 
-                // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
                 recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
 
                 if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
@@ -57,15 +75,19 @@ export async function PATCH(request: Request) {
             }
         }
         
-        // 2. Fetch current app type to ensure we have the correct base string
-        const { data: currApp, error: fetchErr } = await supabase
-            .from('apps')
-            .select('app_type')
-            .eq('id', id)
-            .eq('publisher_wallet', wallet)
-            .single();
+        // 2. Fetch current app type to ensure we have the correct base string (if not already cached)
+        const currApp = cachedApp || (await (async function() {
+            const { data, error } = await supabase
+                .from('apps')
+                .select('app_type, domain')
+                .eq('id', id)
+                .eq('publisher_wallet', wallet)
+                .single();
+            if (error || !data) throw new Error('App not found');
+            return data;
+        })().catch(() => null));
 
-        if (fetchErr || !currApp) {
+        if (!currApp) {
             return NextResponse.json({ error: 'App not found or unauthorized' }, { status: 404 });
         }
 
