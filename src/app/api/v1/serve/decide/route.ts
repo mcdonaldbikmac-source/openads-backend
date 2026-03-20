@@ -20,7 +20,8 @@ export async function GET(request: Request) {
         // FEATURE: Publisher Pause/Resume Control
         // Check if the requesting app domain is marked as "paused_"
         // ==========================================
-        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
+        const clientReportedParent = searchParams.get('parent_url');
+        const originHeader = clientReportedParent || request.headers.get('origin') || request.headers.get('referer') || '';
         let requestHost = '';
         try { requestHost = new URL(originHeader).host; } catch(e) {}
         

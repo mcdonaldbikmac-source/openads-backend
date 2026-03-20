@@ -44,7 +44,9 @@ function AdFrameContent() {
 
         async function fetchAd() {
             try {
-                const res = await fetch(`/api/v1/serve/decide?placement=${placementId}&position=${position}&t=${Date.now()}`);
+                const parentUrl = document.referrer || window.location.href;
+                const encodedParent = encodeURIComponent(parentUrl);
+                const res = await fetch(`/api/v1/serve/decide?placement=${placementId}&position=${position}&parent_url=${encodedParent}&t=${Date.now()}`);
                 if (!res.ok) throw new Error('API unreachable');
                 const data = await res.json();
                 
@@ -187,11 +189,6 @@ function AdFrameContent() {
                 maxWidth: '100%', 
                 cursor: 'pointer', 
                 display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                overflow: 'hidden', 
-                borderRadius: borderRadius, 
-                margin: '0 auto', 
                 background: 'transparent',
                 position: 'relative',
                 textDecoration: 'none',
@@ -252,12 +249,16 @@ function AdFrameContent() {
                     }, '*');
                 }}
                 style={{ 
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
                     width: '100%', 
                     height: '100%', 
                     objectFit: 'cover', 
                     display: 'block', 
                     borderRadius: borderRadius,
-                    aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto'
+                    aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto',
+                    zIndex: 1
                 }} 
             />
         </a>
