@@ -60,14 +60,7 @@ export async function POST(request: Request) {
         }
 
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
-        if (signature === 'DEV_BYPASS') {
-            const isPMTestWallet = wallet && wallet.toLowerCase() === '0xb9a3faeb416580f4bc1c8f6e2d4773b580e9d18c';
-            if (!isPMTestWallet && process.env.NODE_ENV === 'production') {
-                console.error(`[Security] Critical Firewall Alert: Unauthorized DEV_BYPASS attempt by wallet ${wallet}`);
-                return NextResponse.json({ error: 'DEV_BYPASS is strictly locked to Authorized Internal Testing Wallets on Production.' }, { status: 403 });
-            }
-            console.warn('[Security] DEV_BYPASS accepted for authorized internal/local testing loop.');
-        } else if (body.message && body.message.includes('openads-backend.vercel.app')) {
+        if (body.message && body.message.includes('openads-backend.vercel.app')) {
             // SIWF Bearer Token Verification (Farcaster AuthKit)
             const { nonce } = body;
             if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
