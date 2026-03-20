@@ -164,9 +164,9 @@ function AdFrameContent() {
         height = `${h}px`;
     }
     
-    if (position === 'floating') {
-        width = '100%';
-        height = '100%';
+    if (position === 'floating' || adData.size === '64x64') {
+        width = '100vw';
+        height = '100vh';
     }
 
     const isResponsivePlacement = placementId && placementId.includes('responsive');
@@ -194,7 +194,9 @@ function AdFrameContent() {
                 margin: '0 auto', 
                 background: 'transparent',
                 position: 'relative',
-                textDecoration: 'none'
+                textDecoration: 'none',
+                aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto',
+                boxSizing: 'border-box'
             }}
         >
             {/* Overlay Buttons */}
@@ -254,7 +256,8 @@ function AdFrameContent() {
                     height: '100%', 
                     objectFit: 'cover', 
                     display: 'block', 
-                    borderRadius: borderRadius 
+                    borderRadius: borderRadius,
+                    aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto'
                 }} 
             />
         </a>
