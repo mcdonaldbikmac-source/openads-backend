@@ -171,32 +171,67 @@ function AdFrameContent() {
 
     const isFloating64 = position === 'floating' || adData.size === '64x64';
 
-    const innerAdContent = (
-        <a 
-            href={adData.url}
-            target="_blank"
-            rel="noopener noreferrer"
+        const innerAdContent = (
+        <div 
             ref={containerRef as any}
-            onClick={handleClick}
             style={{ 
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                display: 'block', 
-                background: 'transparent',
-                textDecoration: 'none',
-                overflow: 'hidden',
-                borderRadius: borderRadius,
-                aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto',
-                boxSizing: 'border-box',
-                boxShadow: isFloating64 ? '0 4px 12px rgba(0,0,0,0.15)' : (isFullScreenPopup ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'),
-                border: isFullScreenPopup ? '1px solid rgba(0,0,0,0.1)' : 'none'
+                width: '100%', 
+                height: '100%', 
+                position: 'relative', 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center' 
             }}
         >
+            <a 
+                href={adData.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleClick}
+                style={{ 
+                    display: 'block', 
+                    width: isFloating64 ? '56px' : '100%',
+                    height: isFloating64 ? '56px' : '100%',
+                    background: 'transparent',
+                    textDecoration: 'none',
+                    overflow: 'hidden',
+                    borderRadius: borderRadius,
+                    boxSizing: 'border-box',
+                    boxShadow: isFloating64 ? '0 4px 12px rgba(0,0,0,0.15)' : (isFullScreenPopup ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'),
+                    border: isFullScreenPopup ? '1px solid rgba(0,0,0,0.1)' : 'none'
+                }}
+            >
+                <img 
+                    src={adData.image} 
+                    alt="" 
+                    onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                    }}
+                    onLoad={(e) => {
+                        const imgElement = e.currentTarget;
+                        const h = imgElement.offsetHeight || imgElement.naturalHeight;
+                        const w = imgElement.offsetWidth || imgElement.naturalWidth;
+                        window.parent.postMessage({
+                            type: 'OPENADS_RESIZE',
+                            height: h,
+                            width: w,
+                            position: position
+                        }, '*');
+                    }}
+                    style={{ 
+                        width: '100%', 
+                        height: '100%', 
+                        objectFit: 'cover', 
+                        display: 'block'
+                    }} 
+                />
+            </a>
+
             {/* Overlay Buttons */}
             <div style={{
                 position: 'absolute', 
-                top: isFloating64 ? '6px' : '6px', 
-                right: isFloating64 ? '6px' : '6px', 
+                top: isFloating64 ? '4px' : '6px', 
+                right: isFloating64 ? '4px' : '6px', 
                 display: 'flex', 
                 gap: '4px', 
                 zIndex: 1000000,
@@ -237,38 +272,7 @@ function AdFrameContent() {
                     ✕
                 </div>
             </div>
-
-            <img 
-                src={adData.image} 
-                alt="" 
-                onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                }}
-                onLoad={(e) => {
-                    const imgElement = e.currentTarget;
-                    const h = imgElement.offsetHeight || imgElement.naturalHeight;
-                    const w = imgElement.offsetWidth || imgElement.naturalWidth;
-                    window.parent.postMessage({
-                        type: 'OPENADS_RESIZE',
-                        height: h,
-                        width: w,
-                        position: position
-                    }, '*');
-                }}
-                style={{ 
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%', 
-                    height: '100%', 
-                    objectFit: 'cover', 
-                    display: 'block', 
-                    borderRadius: borderRadius,
-                    aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto',
-                    zIndex: 1
-                }} 
-            />
-        </a>
+        </div>
     );
 
     if (isFullScreenPopup) {
