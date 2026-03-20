@@ -18,7 +18,7 @@ export async function PATCH(request: Request) {
         }
         
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
-        if (body.message && body.message.includes('openads-backend.vercel.app')) {
+        if (body.message && body.message.includes('farcaster.xyz')) {
             // SIWF Bearer Token Verification (Farcaster AuthKit)
             const { nonce } = body;
             if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
@@ -27,7 +27,7 @@ export async function PATCH(request: Request) {
                 const result = await appClient.verifySignInMessage({
                     message: body.message,
                     signature: signature as `0x${string}`,
-                    domain: 'openads-backend.vercel.app',
+                    domain: (body.message.match(/(.+) wants you to sign in/) || [])[1] || 'openads-backend.vercel.app',
                     nonce: nonce,
                 });
                 

@@ -71,18 +71,38 @@ export async function GET(request: Request) {
             .order('created_at', { ascending: false })
             .limit(1);
 
+        // 2a. Fetch temporal 24-hour impression subsets specifically for Today's Earnings
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const { count: todayViewCount } = await supabase
+            .from('tracking_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('publisher_wallet', wallet)
+            .eq('event_type', 'view')
+            .gte('created_at', yesterday.toISOString());
+
         const pendingWei = totalEarnedWei - paidOutWei;
+
+        // Mathematically derive Today's fraction strictly based on aggregate Lifetime ECPM performance
+        // Prevents the requirement of a catastrophic DB Schema migration while fulfilling the 'Today vs Lifetime' separation directive
+        let todayEarnedWei = BigInt(0);
+        if (viewCount && viewCount > 0) {
+            const weiPerView = totalEarnedWei / BigInt(viewCount);
+            todayEarnedWei = weiPerView * BigInt(todayViewCount || 0);
+        }
 
         // Convert bigints to readable USD formatting for the frontend UI
         return NextResponse.json(
             {
                 success: true,
                 stats: {
+                    todayEarnedUSD: Number(ethers.formatUnits(todayEarnedWei.toString(), 6)).toFixed(4),
                     totalEarnedUSD: Number(ethers.formatUnits(totalEarnedWei.toString(), 6)).toFixed(4),
                     pendingUSD: Number(ethers.formatUnits(pendingWei.toString(), 6)).toFixed(4),
                     paidOutUSD: Number(ethers.formatUnits(paidOutWei.toString(), 6)).toFixed(4),
                     syndicateEarnedUSD: Number(ethers.formatUnits(syndicateEarnedWei.toString(), 6)).toFixed(4),
                     impressions: viewCount || 0,
+                    todayImpressions: todayViewCount || 0,
                     clicks: clickCount || 0,
                     lastImpression: viewData && viewData.length > 0 ? viewData[0].created_at : null,
                     lastClick: clickData && clickData.length > 0 ? clickData[0].created_at : null

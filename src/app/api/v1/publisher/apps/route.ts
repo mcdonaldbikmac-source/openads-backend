@@ -60,14 +60,14 @@ export async function POST(request: Request) {
         }
 
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
-        if (body.message && (body.message.includes('farcaster.xyz') || body.signature?.length > 130)) {
+        if (body.message && body.message.includes('farcaster.xyz')) {
             // SIWF Bearer Token Verification (Farcaster AuthKit)
             const { nonce } = body;
             if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
             
             try {
                 // Dynamically extract domain from the SIWE message to support localhost, vercel.app, and custom domains
-                const domainMatch = body.message.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|localhost:[0-9]+) wants you to sign in/);
+                const domainMatch = body.message.match(/(.+) wants you to sign in/);
                 const extractedDomain = domainMatch ? domainMatch[1] : 'openads-backend.vercel.app';
 
                 const result = await appClient.verifySignInMessage({

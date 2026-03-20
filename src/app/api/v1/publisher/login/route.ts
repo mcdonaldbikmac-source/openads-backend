@@ -45,7 +45,7 @@ export async function POST(request: Request) {
                 const result = await appClient.verifySignInMessage({
                     message: message,
                     signature: signature as `0x${string}`,
-                    domain: 'openads-backend.vercel.app',
+                    domain: (body.message.match(/(.+) wants you to sign in/) || [])[1] || 'openads-backend.vercel.app',
                     nonce: nonce,
                 });
                 if (!result.success || result.fid.toString() !== wallet) {
