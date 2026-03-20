@@ -37,13 +37,9 @@ export async function POST(request: Request) {
             try {
                 const expectedMessage = `Sign to edit campaign ${campaign_id}`;
                 let recoveredAddress;
-                // Maintain backwards compatibility if frontend signed raw messages
-                try {
-                    recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-                } catch(e) {
-                    recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, signature);
-                }
-                
+                // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
+                recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+
                 if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
                     throw new Error("Signature mismatch");
                 }

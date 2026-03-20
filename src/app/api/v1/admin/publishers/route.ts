@@ -38,6 +38,7 @@ export async function GET() {
             } catch (e) {}
 
             return {
+                app_id: appRecord.id, // EXPOSED FOR ADMIN SUSPEND FUNCTIONALITY
                 wallet: appRecord.publisher_wallet || 'Unknown',
                 app_name: appRecord.name || `App ${appRecord.publisher_wallet.slice(0,6)}`,
                 domain_url: appRecord.domain || 'N/A',
@@ -45,7 +46,7 @@ export async function GET() {
                 is_verified: appRecord.logo_url === 'verified',
                 impressions: views || 0,
                 earnings: earningsFormatted,
-                status: appRecord.logo_url === 'verified' ? 'active' : 'pending',
+                status: appRecord.logo_url === 'banned' ? 'banned' : (appRecord.logo_url === 'verified' ? 'active' : 'pending'),
                 created_at: appRecord.created_at
             };
         }));

@@ -91,11 +91,8 @@ export async function POST(request: Request) {
                 const expectedMessage = `Sign to register domain ${domain} for publisher ${wallet}`;
                 let recoveredAddress;
                 
-                if (body.message) {
-                    recoveredAddress = ethers.verifyMessage(body.message, signature);
-                } else {
-                    recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-                }
+                // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
+                recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
 
                 if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
                     throw new Error("Signature mismatch");
@@ -152,10 +149,10 @@ export async function POST(request: Request) {
             );
         }
 
-        // Check for Duplicate Domain Registration
+        // Check for Duplicate Domain Registration (Same Wallet)
         const { data: existingApp, error: existError } = await supabase
             .from('apps')
-            .select('id')
+            .select('id, app_type')
             .eq('publisher_wallet', wallet)
             .eq('domain', domain)
             .limit(1);
@@ -165,11 +162,34 @@ export async function POST(request: Request) {
         }
 
         if (existingApp && existingApp.length > 0) {
+            if (existingApp[0].app_type === 'banned') {
+                return NextResponse.json(
+                    { error: `ACCESS DENIED: The domain ${domain} is permanently banned from the OpenAds ecosystem for grave policy violations.` }, 
+                    { status: 403, headers: { 'Access-Control-Allow-Origin': '*' } }
+                );
+            }
+
             // Instead of throwing an error, we return success with a duplicate flag
             // so the frontend can seamlessly move to Step 2 and show the snippet.
             return NextResponse.json(
                 { success: true, is_duplicate: true, app: existingApp[0] }, 
                 { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } }
+            );
+        }
+
+        // GLOBAL DOMAIN CONTAMINATION CHECK (Cross-Wallet Registration Firewall)
+        // If a hacker generates a brand new MetaMask wallet to re-register a Banned URL, block it matrix-wide.
+        const { data: bannedDomain } = await supabase
+            .from('apps')
+            .select('id')
+            .eq('domain', domain)
+            .eq('app_type', 'banned')
+            .limit(1);
+
+        if (bannedDomain && bannedDomain.length > 0) {
+            return NextResponse.json(
+                { error: `ACCESS DENIED: The domain ${domain} is permanently banned from the OpenAds network and cannot be registered by any existing or new wallet identities.` }, 
+                { status: 403, headers: { 'Access-Control-Allow-Origin': '*' } }
             );
         }
 

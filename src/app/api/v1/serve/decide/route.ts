@@ -26,6 +26,8 @@ export async function GET(request: Request) {
         
         let publisherWallet = placementId.split('-')[1]; // Fallback ex: top-0xabc...
         
+        let allowedFormats: string[] | null = null;
+
         if (requestHost && publisherWallet && publisherWallet.startsWith('0x')) {
             const { data: appData } = await supabase
                 .from('apps')
@@ -34,9 +36,26 @@ export async function GET(request: Request) {
                 .ilike('domain', `%${requestHost}%`)
                 .single();
 
-            if (appData && appData.app_type.startsWith('paused_')) {
-                console.log(`[OpenAds] ⏸️ Blocked Ad Request: Domain ${requestHost} is paused by publisher.`);
-                return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 404 });
+            if (appData) {
+                const parts = appData.app_type.split('|');
+                const baseAppType = parts[0];
+                
+                if (parts.length > 1 && parts[1].startsWith('formats:')) {
+                    allowedFormats = parts[1].replace('formats:', '').split(',');
+                }
+
+                if (baseAppType === 'banned') {
+                    console.warn(`[Security] 🚫 Brand Safety Halt: Admin-Banned publisher domain [${requestHost}] attempted to siphon inventory.`);
+                    return NextResponse.json({ error: 'Domain explicitly banned by Administrator.' }, { status: 403 });
+                }
+
+                if (baseAppType.startsWith('paused_')) {
+                    console.log(`[OpenAds] ⏸️ Blocked Ad Request: Domain ${requestHost} is paused by publisher.`);
+                    return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 404 });
+                }
+            } else {
+                console.warn(`[Security] 🚫 Brand Safety Halt: Unregistered or Admin-Deleted publisher domain [${requestHost}] attempted to siphon inventory.`);
+                return NextResponse.json({ error: 'Domain unauthorized or explicitly deleted by Administrator.' }, { status: 403 });
             }
         }
 
@@ -73,6 +92,18 @@ export async function GET(request: Request) {
                 if (position === 'floating') return types.includes('64x64') || types.includes('responsive');
             }
             
+            // 3. Publisher-Level Remote Control Enforcement (DB allowed_formats)
+            if (allowedFormats && allowedFormats.length > 0) {
+                let isFormatAllowed = false;
+                for (const fmt of allowedFormats) {
+                    if (types.includes(fmt) || types.includes('responsive')) {
+                        isFormatAllowed = true;
+                        break;
+                    }
+                }
+                if (!isFormatAllowed) return false;
+            }
+
             return true;
         });
 

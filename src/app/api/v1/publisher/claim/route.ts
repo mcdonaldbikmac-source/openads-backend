@@ -40,12 +40,8 @@ export async function POST(request: Request) {
             try {
                 const expectedMessage = `Sign to authorize withdrawal for ${wallet}`;
                 let recoveredAddress;
-                // Maintain backwards compatibility
-                try {
-                    recoveredAddress = ethers.verifyMessage(expectedMessage, clientSignature);
-                } catch(e) {
-                    recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, clientSignature);
-                }
+                // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
+                recoveredAddress = ethers.verifyMessage(expectedMessage, clientSignature);
                 if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
                     throw new Error("Signature mismatch");
                 }

@@ -11,10 +11,10 @@ const appClient = createAppClient({
 export async function PATCH(request: Request) {
     try {
         const body = await request.json();
-        const { id, wallet, action, signature } = body;
+        const { id, wallet, formats, signature } = body;
 
-        if (!id || !wallet || !action || !signature) {
-            return NextResponse.json({ error: 'Missing required parameters (id, wallet, action, signature)' }, { status: 400 });
+        if (!id || !wallet || !Array.isArray(formats) || !signature) {
+            return NextResponse.json({ error: 'Missing required parameters (id, wallet, formats, signature)' }, { status: 400 });
         }
         
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
@@ -42,7 +42,7 @@ export async function PATCH(request: Request) {
         } else {
             // Web3 SIWE Verification (Ethers.js)
             try {
-                const expectedMessage = `Sign to ${action} app ${id}`;
+                const expectedMessage = `Sign to update formats for app ${id}`;
                 let recoveredAddress;
                 
                 // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
@@ -57,10 +57,6 @@ export async function PATCH(request: Request) {
             }
         }
         
-        if (action !== 'pause' && action !== 'resume') {
-            return NextResponse.json({ error: 'Invalid action. Must be "pause" or "resume".' }, { status: 400 });
-        }
-
         // 2. Fetch current app type to ensure we have the correct base string
         const { data: currApp, error: fetchErr } = await supabase
             .from('apps')
@@ -73,19 +69,12 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'App not found or unauthorized' }, { status: 404 });
         }
 
-        let newType = currApp.app_type;
+        let newType = currApp.app_type.split('|')[0]; // Isolate base state (e.g., 'web' or 'paused_web')
 
-        if (action === 'pause') {
-            // Apply prefix if not already paused
-            if (!newType.startsWith('paused_')) {
-                newType = `paused_${newType}`;
-            }
-        } else if (action === 'resume') {
-            // Remove prefix if paused
-            if (newType.startsWith('paused_')) {
-                newType = newType.replace('paused_', '');
-            }
+        if (formats.length > 0) {
+            newType = `${newType}|formats:${formats.join(',')}`;
         }
+        // If formats array is empty, it just leaves it as the base 'web', allowing all by default.
 
         // 3. Perform the actual update back to DB
         const { data, error } = await supabase

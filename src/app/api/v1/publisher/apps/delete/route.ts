@@ -55,11 +55,8 @@ export async function POST(req: Request) {
                 const expectedMessage = `Sign to permanently delete app ${appId}`;
                 let recoveredAddress;
                 
-                if (body.message) {
-                    recoveredAddress = ethers.verifyMessage(body.message, signature);
-                } else {
-                    recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-                }
+                // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
+                recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
 
                 if (recoveredAddress.toLowerCase() !== publisherWallet.toLowerCase()) {
                     throw new Error("Cryptographic verification mismatch");

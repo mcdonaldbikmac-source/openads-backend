@@ -62,16 +62,8 @@ export async function POST(request: Request) {
                 // to permanently block Mempool Front-Running and Replay Attacks.
                 const expectedMessage = `Sign to authorize Campaign Creation.\nTxHash: ${txHash}`;
                 let recoveredAddress;
-                // Maintain backwards compatibility if frontend already signed with legacy payload
-                try {
-                    recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
-                } catch(e) {
-                    try {
-                        recoveredAddress = ethers.verifyMessage(`Sign to authorize campaign creation for ${budget}`, signature);
-                    } catch(e2) {
-                        recoveredAddress = ethers.verifyMessage(body.message || expectedMessage, signature);
-                    }
-                }
+                // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
+                recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
                 
                 if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
                     throw new Error("Signature mismatch");

@@ -9,7 +9,42 @@ export async function GET(request: Request) {
         const publisherWallet = searchParams.get('publisher');
 
         if (!publisherWallet) {
-            return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
+            return new NextResponse('.openads-frame { display: none !important; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
+        }
+
+        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
+        let requestHost = '';
+        try { requestHost = new URL(originHeader).host; } catch(e) {}
+
+        let allowedFormats: string[] | null = null;
+        let isPaused = false;
+
+        // Domain spoofing & paused state verification
+        if (requestHost && publisherWallet.startsWith('0x')) {
+            const { data: appData } = await supabase
+                .from('apps')
+                .select('app_type')
+                .ilike('publisher_wallet', publisherWallet)
+                .ilike('domain', `%${requestHost}%`)
+                .single();
+
+            if (appData) {
+                const parts = appData.app_type.split('|');
+                const baseAppType = parts[0];
+                if (parts.length > 1 && parts[1].startsWith('formats:')) {
+                    allowedFormats = parts[1].replace('formats:', '').split(',');
+                }
+                if (baseAppType.startsWith('paused_') || baseAppType === 'banned') {
+                    isPaused = true;
+                }
+            } else {
+                // If it fails domain spoofing checks (or doesn't exist), ghost it.
+                isPaused = true;
+            }
+        }
+
+        if (isPaused) {
+            return new NextResponse('.openads-frame { display: none !important; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
         }
 
         const { data: campaigns, error } = await supabase
@@ -23,6 +58,20 @@ export async function GET(request: Request) {
 
         const now = new Date();
         const eligibleCampaigns = campaigns.filter(camp => {
+            const types = camp.ad_type || '';
+            
+            // 1. Publisher-Level Remote Control Enforcement (DB allowed_formats)
+            if (allowedFormats && allowedFormats.length > 0) {
+                let isFormatAllowed = false;
+                for (const fmt of allowedFormats) {
+                    if (types.includes(fmt) || types.includes('responsive')) {
+                        isFormatAllowed = true;
+                        break;
+                    }
+                }
+                if (!isFormatAllowed) return false;
+            }
+
             const hasStarted = !camp.scheduled_start || new Date(camp.scheduled_start) <= now;
             const budget = BigInt(camp.budget_wei || 0);
             const spend = BigInt(camp.spend_wei || 0);
