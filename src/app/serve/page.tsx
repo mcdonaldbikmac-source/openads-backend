@@ -190,8 +190,8 @@ function AdFrameContent() {
                 onClick={handleClick}
                 style={{ 
                     display: 'block', 
-                    width: isFloating64 ? '56px' : '100%',
-                    height: isFloating64 ? '56px' : '100%',
+                    width: isFloating64 ? '64px' : '100%',
+                    height: isFloating64 ? '64px' : '100%',
                     background: 'transparent',
                     textDecoration: 'none',
                     overflow: 'hidden',
@@ -230,8 +230,8 @@ function AdFrameContent() {
             {/* Overlay Buttons */}
             <div style={{
                 position: 'absolute', 
-                top: isFloating64 ? '4px' : '6px', 
-                right: isFloating64 ? '4px' : '6px', 
+                top: isFloating64 ? '14px' : '6px', 
+                right: isFloating64 ? '14px' : '6px', 
                 display: 'flex', 
                 gap: '4px', 
                 zIndex: 1000000,
