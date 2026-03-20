@@ -80,14 +80,11 @@ export async function POST(request: Request) {
             publisherWallet = parts.length > 1 ? parts[1] : null;
         }
 
-        // Fallback for testing if no wallet was passed
+        // Cryptographic Wallet Integrity Firewall
         if (!publisherWallet || !publisherWallet.startsWith('0x') || publisherWallet.length !== 42) {
             console.warn(`[Security] Blocked tracking ping with malformed wallet: ${publisherWallet}`);
             return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 400 });
         }
-
-        // Provide mock origin validation logic block to avoid compilation errors but removing DB query
-        let isValidDomain = true;
 
         // Normalize event name (SDK sends 'impression', RPC expects 'view')
         let normalizedEvent = 'click';

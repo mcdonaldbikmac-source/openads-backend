@@ -48,7 +48,7 @@ function AdFrameContent() {
                 if (!res.ok) throw new Error('API unreachable');
                 const data = await res.json();
                 
-                // Bypass sessionStorage check if testing via preview mode
+                // Dashboard Preview Mode: Render ad unconditionally without enforcing sessionStorage history
                 if (data.ad && (isPreview || !sessionStorage.getItem(`openads_closed_${data.ad.id}`))) {
                     setAdData(data.ad);
                     
