@@ -157,19 +157,14 @@ function AdFrameContent() {
     if (loading || !adData) return null;
 
     let width = '100%';
-    let height = 'auto';
+    let height = '100%';
     let borderRadius = position === 'floating' || adData.size === '64x64' ? '50%' : '4px';
 
-    if (adData.size && adData.size.includes('x')) {
-        const [w, h] = adData.size.split('x');
-        width = `${w}px`;
-        height = `${h}px`;
-    }
+    // The iframe naturally constrains our dimensions from the parent window. 
+    // We explicitly avoid using 100vw/100vh as 100vw is known to cause overflow clipping 
+    // inside iframes on iOS and certain WebKit engines even with margin resets.
     
-    if (position === 'floating' || adData.size === '64x64') {
-        width = '100vw';
-        height = '100vh';
-    }
+    // Instead we gracefully scale to 100% of the allocated iframe real estate.
 
     const isResponsivePlacement = placementId && placementId.includes('responsive');
     const isFullScreenPopup = isResponsivePlacement && adData.size === '300x250';
@@ -266,7 +261,7 @@ function AdFrameContent() {
 
     if (isFullScreenPopup) {
         return (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100vw', height: '100vh' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%' }}>
                 <div style={{ position: 'relative', width: '300px', height: '250px', background: '#fff', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
                     {innerAdContent}
                 </div>
