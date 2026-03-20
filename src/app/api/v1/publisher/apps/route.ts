@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         }
 
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
-        if (body.message && body.message.includes('farcaster.xyz')) {
+        if (!String(wallet).startsWith('0x')) {
             // SIWF Bearer Token Verification (Farcaster AuthKit)
             const { nonce } = body;
             if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
         // EDGE CASE 2: Malformed Registration Data
         // ==========================================
         const ethRegex = /^0x[a-fA-F0-9]{40}$/;
-        const isFarcasterRequest = body.message && body.message.includes('farcaster.xyz');
+        const isFarcasterRequest = !String(wallet).startsWith('0x');
         if (!isFarcasterRequest && !ethRegex.test(wallet)) {
             return NextResponse.json({ error: 'Invalid Ethereum Wallet Address format.' }, { status: 400 });
         }

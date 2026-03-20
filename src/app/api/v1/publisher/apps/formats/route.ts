@@ -18,7 +18,7 @@ export async function PATCH(request: Request) {
         }
         
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
-        if (body.message && body.message.includes('farcaster.xyz')) {
+        if (!String(wallet).startsWith('0x')) {
             // SIWF Bearer Token Verification (Farcaster AuthKit)
             const { nonce } = body;
             if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
@@ -42,7 +42,7 @@ export async function PATCH(request: Request) {
         }
         
         let cachedApp = null;
-        if (!body.message || !body.message.includes('farcaster.xyz')) {
+        if (String(wallet).startsWith('0x')) {
             // Web3 SIWE Verification (Ethers.js)
             try {
                 // To reuse the Step 1 signature and eliminate double-signing UX friction,

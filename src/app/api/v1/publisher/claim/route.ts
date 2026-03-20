@@ -20,7 +20,7 @@ export async function POST(request: Request) {
         }
 
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
-        if (body.message && body.message.includes('farcaster.xyz')) {
+        if (!String(wallet).startsWith('0x')) {
             const { nonce } = body;
             if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF Cryptographic authentication missing nonce.' }, { status: 401 });
             try {
