@@ -25,6 +25,11 @@ export async function GET(request: Request) {
         let requestHost = '';
         try { requestHost = new URL(originHeader).host; } catch(e) {}
         
+        // Implicitly whitelist Vercel iframe architecture and local staging environments
+        if (['openads-backend.vercel.app', 'localhost:3000', '127.0.0.1:8080', 'localhost'].includes(requestHost)) {
+            requestHost = ''; // Clear it to silently bypass the DB check
+        }
+        
         let publisherWallet = placementId.split('-')[1]; // Fallback ex: top-0xabc...
         
         let allowedFormats: string[] | null = null;
