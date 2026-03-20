@@ -111,12 +111,10 @@ export async function GET(request: Request) {
                 '    right: 20px !important;',
                 '    width: 64px !important;',
                 '    height: 64px !important;',
-                '    border-radius: 50% !important;',
-                '    border: none !important;',
                 '    z-index: 2147483647 !important;',
-                '    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;',
                 '    background: transparent !important;',
                 '    pointer-events: auto !important;',
+                '    border: none !important;',
                 '}'
             ].join('\n'));
         } 
@@ -131,11 +129,10 @@ export async function GET(request: Request) {
                 '    transform: translate(-50%, -50%) !important;',
                 '    width: 300px !important;',
                 '    height: 250px !important;',
-                '    border: 1px solid rgba(0,0,0,0.1) !important;',
                 '    z-index: 2147483647 !important;',
-                '    box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;',
                 '    background: transparent !important;',
                 '    pointer-events: auto !important;',
+                '    border: none !important;',
                 '}'
             ].join('\n'));
         } 

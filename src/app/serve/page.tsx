@@ -187,25 +187,35 @@ function AdFrameContent() {
                 overflow: 'hidden',
                 borderRadius: borderRadius,
                 aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                boxShadow: isFloating64 ? '0 4px 12px rgba(0,0,0,0.15)' : (isFullScreenPopup ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'),
+                border: isFullScreenPopup ? '1px solid rgba(0,0,0,0.1)' : 'none'
             }}
         >
             {/* Overlay Buttons */}
             <div style={{
-                position: 'absolute', top: position === 'floating' || adData.size === '64x64' ? '12px' : '6px', right: position === 'floating' || adData.size === '64x64' ? '12px' : '6px', display: 'flex', gap: '6px', zIndex: 1000000
+                position: 'absolute', 
+                top: isFloating64 ? '6px' : '6px', 
+                right: isFloating64 ? '6px' : '6px', 
+                display: 'flex', 
+                gap: '4px', 
+                zIndex: 1000000,
+                opacity: 0.9
             }}>
-                {/* Info Button */}
-                <div 
-                    onClick={(e) => { e.stopPropagation(); window.open('https://openads.xyz', '_blank'); }}
-                    style={{
-                        width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', 
-                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                        fontSize: '11px', fontWeight: 'bold', cursor: 'help', backdropFilter: 'blur(4px)'
-                    }}
-                    title="Powered by OpenAds"
-                >
-                    ?
-                </div>
+                {/* Info Button - Hidden on 64x64 to save space */}
+                {!isFloating64 && (
+                    <div 
+                        onClick={(e) => { e.stopPropagation(); window.open('https://openads.xyz', '_blank'); }}
+                        style={{
+                            width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', 
+                            color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                            fontSize: '11px', fontWeight: 'bold', cursor: 'help', backdropFilter: 'blur(4px)'
+                        }}
+                        title="Powered by OpenAds"
+                    >
+                        ?
+                    </div>
+                )}
                 {/* Close Button */}
                 <div 
                     onClick={(e) => {
@@ -215,9 +225,12 @@ function AdFrameContent() {
                         window.parent.postMessage({ type: 'OPENADS_COLLAPSE' }, '*');
                     }}
                     style={{
-                        width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', 
+                        width: isFloating64 ? '14px' : '18px', 
+                        height: isFloating64 ? '14px' : '18px', 
+                        borderRadius: '50%', 
+                        background: 'rgba(0,0,0,0.5)', 
                         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                        fontSize: '9px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)'
+                        fontSize: isFloating64 ? '8px' : '9px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)'
                     }}
                     title="Close Ad"
                 >
