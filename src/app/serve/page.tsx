@@ -179,14 +179,13 @@ function AdFrameContent() {
             ref={containerRef as any}
             onClick={handleClick}
             style={{ 
-                width: width, 
-                height: height, 
-                maxWidth: '100%', 
-                cursor: 'pointer', 
-                display: 'flex', 
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                display: 'block', 
                 background: 'transparent',
-                position: 'relative',
                 textDecoration: 'none',
+                overflow: 'hidden',
+                borderRadius: borderRadius,
                 aspectRatio: (position === 'floating' || adData?.size === '64x64') ? '1 / 1' : 'auto',
                 boxSizing: 'border-box'
             }}
