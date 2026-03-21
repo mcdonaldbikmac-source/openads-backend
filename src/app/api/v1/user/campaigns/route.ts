@@ -12,10 +12,11 @@ export async function GET(request: Request) {
         }
 
         // Fetch user's campaigns
+        // CRITICAL FIX: Use .ilike() for case-insensitive matching because EIP-55 Web3 Wallet checksums may be passed lowercased
         const { data: campaigns, error } = await supabase
             .from('campaigns')
             .select('*')
-            .eq('advertiser_wallet', wallet)
+            .ilike('advertiser_wallet', wallet)
             .order('created_at', { ascending: false });
 
         if (error) {
