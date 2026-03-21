@@ -25,14 +25,14 @@ export async function GET(req: Request) {
             const { count: views } = await supabase
                 .from('tracking_events')
                 .select('*', { count: 'exact', head: true })
-                .eq('publisher_wallet', appRecord.publisher_wallet)
+                .ilike('publisher_wallet', appRecord.publisher_wallet)
                 .eq('event_type', 'view');
             
             // Get earnings from the publisher's global portfolio
             const { data: financeRecord } = await supabase
                 .from('publishers')
                 .select('total_earned_wei')
-                .eq('wallet', appRecord.publisher_wallet)
+                .ilike('wallet', appRecord.publisher_wallet)
                 .single();
                 
             let rawEarningsWei = financeRecord ? String(financeRecord.total_earned_wei).split('.')[0] : '0';

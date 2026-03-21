@@ -51,7 +51,7 @@ export async function PATCH(request: Request) {
                     .from('apps')
                     .select('app_type, domain')
                     .eq('id', id)
-                    .eq('publisher_wallet', wallet)
+                    .ilike('publisher_wallet', wallet) // Changed from .eq to .ilike
                     .single();
 
                 if (fetchErr || !currApp) {
@@ -81,7 +81,7 @@ export async function PATCH(request: Request) {
                 .from('apps')
                 .select('app_type, domain')
                 .eq('id', id)
-                .eq('publisher_wallet', wallet)
+                .ilike('publisher_wallet', wallet) // Changed from .eq to .ilike
                 .single();
             if (error || !data) throw new Error('App not found');
             return data;
@@ -103,7 +103,7 @@ export async function PATCH(request: Request) {
             .from('apps')
             .update({ app_type: newType })
             .eq('id', id)
-            .eq('publisher_wallet', wallet)
+            .ilike('publisher_wallet', wallet) // Changed from .eq to .ilike
             .select('id, name, domain, app_type')
             .single();
 

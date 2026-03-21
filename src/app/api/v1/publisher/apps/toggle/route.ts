@@ -62,18 +62,18 @@ export async function PATCH(request: Request) {
         }
 
         // 2. Fetch current app type to ensure we have the correct base string
-        const { data: currApp, error: fetchErr } = await supabase
+        const { data: appData, error: dbErr } = await supabase
             .from('apps')
-            .select('app_type')
+            .select('app_type, id')
             .eq('id', id)
-            .eq('publisher_wallet', wallet)
+            .ilike('publisher_wallet', wallet)
             .single();
 
-        if (fetchErr || !currApp) {
+        if (dbErr || !appData) {
             return NextResponse.json({ error: 'App not found or unauthorized' }, { status: 404 });
         }
 
-        let newType = currApp.app_type;
+        let newType = appData.app_type;
 
         if (action === 'pause') {
             // Apply prefix if not already paused
@@ -88,16 +88,16 @@ export async function PATCH(request: Request) {
         }
 
         // 3. Perform the actual update back to DB
-        const { data, error } = await supabase
+        const { data, error: updErr } = await supabase
             .from('apps')
             .update({ app_type: newType })
             .eq('id', id)
-            .eq('publisher_wallet', wallet)
+            .ilike('publisher_wallet', wallet)
             .select('id, name, domain, app_type')
             .single();
 
-        if (error) {
-            throw error;
+        if (updErr) {
+            throw updErr;
         }
 
         return NextResponse.json(

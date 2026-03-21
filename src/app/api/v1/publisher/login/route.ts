@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         const { data: pubData, error: fetchErr } = await supabase
             .from('publishers')
             .select('wallet, referred_by')
-            .eq('wallet', wallet)
+            .ilike('wallet', wallet)
             .single();
 
         if (fetchErr && fetchErr.code !== 'PGRST116') { // PGRST116 means row not found

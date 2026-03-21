@@ -20,7 +20,7 @@ export async function GET(request: Request) {
         const { data: apps, error } = await supabase
             .from('apps')
             .select('id, name, domain, created_at, logo_url')
-            .eq('publisher_wallet', wallet)
+            .ilike('publisher_wallet', wallet)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
         const { count, error: countError } = await supabase
             .from('apps')
             .select('*', { count: 'exact', head: true })
-            .eq('publisher_wallet', wallet);
+            .ilike('publisher_wallet', wallet);
 
         if (countError) throw countError;
         

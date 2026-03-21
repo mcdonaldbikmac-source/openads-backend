@@ -78,8 +78,8 @@ export async function POST(request: Request) {
         // Calculate exactly what the new paid_out_wei should be to keep the DB in perfect sync with the Blockchain
         const { data: pubData, error: fetchErr } = await supabase
             .from('publishers')
-            .select('paid_out_wei')
-            .eq('wallet', wallet)
+            .select('paid_out_wei, total_earned_wei') // Select total_earned_wei as well
+            .ilike('wallet', wallet) // Changed from .eq to .ilike
             .single();
 
         if (fetchErr || !pubData) {
@@ -87,12 +87,17 @@ export async function POST(request: Request) {
         }
 
         const currentPaidOut = BigInt(pubData.paid_out_wei || '0');
+        const currentTotalEarned = BigInt(pubData.total_earned_wei || '0'); // Get current total_earned_wei
         const newPaidOut = currentPaidOut + amountWeiFromBlockchain;
+        const newTotalEarned = currentTotalEarned + amountWeiFromBlockchain; // Update total_earned_wei
 
         const { error: updateErr } = await supabase
             .from('publishers')
-            .update({ paid_out_wei: newPaidOut.toString() })
-            .eq('wallet', wallet);
+            .update({
+                paid_out_wei: newPaidOut.toString(),
+                total_earned_wei: newTotalEarned.toString() // Add total_earned_wei update
+            })
+            .ilike('wallet', wallet); // Changed from .eq to .ilike
 
         if (updateErr) {
             return NextResponse.json({ error: 'Blockchain Verification Passed, but Database Update Failed.' }, { status: 500 });

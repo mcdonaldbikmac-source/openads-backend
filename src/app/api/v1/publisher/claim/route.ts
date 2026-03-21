@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         const { data: pubData, error: fetchErr } = await supabase
             .from('publishers')
             .select('total_earned_wei, paid_out_wei')
-            .eq('wallet', wallet)
+            .ilike('wallet', wallet)
             .single();
 
         if (fetchErr) {

@@ -72,6 +72,7 @@ export async function POST(req: Request) {
             .from('apps')
             .select('publisher_wallet')
             .eq('id', appId)
+            .ilike('publisher_wallet', publisherWallet) // Added .ilike as per instruction
             .single();
 
         if (verifyError || !appData) {
