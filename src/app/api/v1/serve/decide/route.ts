@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         
         let allowedFormats: string[] | null = null;
 
-        if (requestHost && publisherWallet && publisherWallet.startsWith('0x')) {
+        if (requestHost && publisherWallet && publisherWallet.toLowerCase().startsWith('0x')) {
             const { data: appData } = await supabase
                 .from('apps')
                 .select('app_type')

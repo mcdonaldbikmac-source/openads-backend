@@ -30,7 +30,7 @@ export async function verifyAdminAuth(req: Request): Promise<boolean> {
         const { message, signature, nonce, fid } = payload;
         
         // Determine if this is a standard Web3 Wallet SIWE or Farcaster SIWF
-        if (fid && String(fid).startsWith('0x')) {
+        if (fid && String(fid).toLowerCase().startsWith('0x')) {
             // Web3 Wallet verification
             if (!signature) throw new Error('Unauthorized');
             const recoveredAddress = ethers.verifyMessage(`Sign to login to OpenAds Network`, signature);

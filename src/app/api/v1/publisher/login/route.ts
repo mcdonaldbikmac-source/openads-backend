@@ -22,7 +22,7 @@ export async function POST(request: Request) {
         // to prevent attackers from mass-registering unjoined wallets under their referral tree.
         // Farcaster FIDs (numeric) MUST also be cryptographically proven via SIWF Bearer tokens.
         // =========================================================================
-        if (String(wallet).startsWith('0x')) {
+        if (String(wallet).toLowerCase().startsWith('0x')) {
             if (!signature) {
                 return NextResponse.json({ error: 'Cryptographic signature required for Web3 Wallet registration to prevent Referral Hijacking.' }, { status: 401 });
             }

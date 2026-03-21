@@ -20,7 +20,7 @@ export async function GET(request: Request) {
         let isPaused = false;
 
         // Domain spoofing & paused state verification
-        if (requestHost && publisherWallet.startsWith('0x')) {
+        if (requestHost && publisherWallet.toLowerCase().startsWith('0x')) {
             const { data: appData } = await supabase
                 .from('apps')
                 .select('app_type')
