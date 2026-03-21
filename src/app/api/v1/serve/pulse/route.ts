@@ -186,30 +186,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 403 });
         }
 
-        // Validate the Publisher using the Wallet ID first
-        let publisherApp = null;
-        let appError = null;
-        
-        const { data: appByWallet } = await supabase
+        // Validate the Publisher's Domain using strict wallet matching
+        const { data: publisherApp, error: appError } = await supabase
             .from('apps')
             .select('id, domain, logo_url, publisher_wallet')
             .ilike('publisher_wallet', publisherWallet)
             .ilike('domain', `%${requestHost}%`)
             .single();
-
-        if (appByWallet) {
-            publisherApp = appByWallet;
-        } else {
-            // Fallback: If legacy ID (e.g. 1550542) was sent, securely authenticate via Domain Origin alone
-            const { data: appByDomain, error: fallbackErr } = await supabase
-                .from('apps')
-                .select('id, domain, logo_url, publisher_wallet')
-                .ilike('domain', `%${requestHost}%`)
-                .limit(1)
-                .single();
-            publisherApp = appByDomain;
-            appError = fallbackErr;
-        }
 
         if (appError || !publisherApp) {
             if (requestHost.includes('openads-backend')) {
