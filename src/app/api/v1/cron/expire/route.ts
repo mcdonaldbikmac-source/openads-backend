@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+
 // This endpoint should be triggered daily by Vercel Cron or an external chron scheduler
 export async function GET(request: Request) {
     try {

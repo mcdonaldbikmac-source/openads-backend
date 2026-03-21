@@ -143,6 +143,9 @@ export async function POST(request: Request) {
                             }
                         }
                         
+                        const hasIframeTag = /<iframe[^>]*src=["'][^"']*openads-backend\.vercel\.app\/serve/i.test(lowerHtml);
+                        const hasSafeWallet = new RegExp(`publisher=${safeWallet}`, 'i').test(lowerHtml);
+                        
                         if (hasIframeTag && hasSafeWallet) {
                             status = 'active'; 
                             
