@@ -14,7 +14,7 @@ export async function GET(request: Request) {
         const clientIp = request.headers.get('x-forwarded-for') || 'anon';
 
         if (!placementId) {
-            return NextResponse.json({ error: 'Missing placement ID' }, { status: 400 });
+            return NextResponse.json({ error: 'Missing placement ID' }, { status: 202 });
         }
 
         const requestedFormat = (placementId && placementId.includes('-')) ? placementId.split('-')[0] : 'responsive';
@@ -59,16 +59,16 @@ export async function GET(request: Request) {
 
                 if (baseAppType === 'banned') {
                     console.warn(`[Security] 🚫 Brand Safety Halt: Admin-Banned publisher domain [${requestHost}] attempted to siphon inventory.`);
-                    return NextResponse.json({ error: 'Domain explicitly banned by Administrator.' }, { status: 403 });
+                    return NextResponse.json({ error: 'Domain explicitly banned by Administrator.' }, { status: 202 });
                 }
 
                 if (baseAppType.startsWith('paused_')) {
                     console.log(`[OpenAds] ⏸️ Blocked Ad Request: Domain ${requestHost} is paused by publisher.`);
-                    return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 404 });
+                    return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 200 });
                 }
             } else {
                 console.warn(`[Security] 🚫 Brand Safety Halt: Unregistered or Admin-Deleted publisher domain [${requestHost}] attempted to siphon inventory.`);
-                return NextResponse.json({ error: 'Domain unauthorized or explicitly deleted by Administrator.' }, { status: 403 });
+                return NextResponse.json({ error: 'Domain unauthorized or explicitly deleted by Administrator.' }, { status: 202 });
             }
         }
 
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
         }
 
         if (!campaigns || campaigns.length === 0) {
-            return NextResponse.json({ error: 'No active campaigns available' }, { status: 404 });
+            return NextResponse.json({ error: 'No active campaigns available' }, { status: 200 });
         }
 
         // 1.5 Filter by explicit placement dimensions AND position to prevent Auction Hijacking
@@ -129,7 +129,7 @@ export async function GET(request: Request) {
         });
 
         if (filteredByPosition.length === 0) {
-            return NextResponse.json({ error: 'No active campaigns matching requested position' }, { status: 404 });
+            return NextResponse.json({ error: 'No active campaigns matching requested position' }, { status: 200 });
         }
 
         const now = new Date();
@@ -152,7 +152,7 @@ export async function GET(request: Request) {
         });
 
         if (eligibleCampaigns.length === 0) {
-            return NextResponse.json({ error: 'All campaigns exhausted' }, { status: 404 });
+            return NextResponse.json({ error: 'All campaigns exhausted' }, { status: 200 });
         }
 
         // =========================================================================

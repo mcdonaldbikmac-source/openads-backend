@@ -40,7 +40,7 @@ export async function POST(request: Request) {
             const { success } = await ratelimit.limit(`ratelimit_${ip}`);
             if (!success) {
                 console.warn(`[OpenAds Security] 🚨 Rate Limit Exceeded for IP: ${ip}. Request blocked.`);
-                return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+                return NextResponse.json({ error: 'Too Many Requests' }, { status: 202 });
             }
         } catch (redisErr) {
             console.warn(`[OpenAds Security] Redis check failed, bypassing rate limit:`, redisErr);
@@ -66,13 +66,13 @@ export async function POST(request: Request) {
                 const { success: successMin } = await fidPerMinRatelimit.limit(`fid_min_${safeFidStr}`);
                 if (!successMin) {
                     console.warn(`[OpenAds Security] 🚨 FID Minutely Rate Limit Exceeded for FID: ${safeFidStr}. Bot farm detected. Request blocked.`);
-                    return NextResponse.json({ error: 'Too Many Impressions (Minute)' }, { status: 429 });
+                    return NextResponse.json({ error: 'Too Many Impressions (Minute)' }, { status: 202 });
                 }
                 // Hourly limit
                 const { success: successHour } = await fidPerHourRatelimit.limit(`fid_hour_${safeFidStr}`);
                 if (!successHour) {
                     console.warn(`[OpenAds Security] 🚨 FID Hourly Rate Limit Exceeded for FID: ${safeFidStr}. Request blocked.`);
-                    return NextResponse.json({ error: 'Too Many Impressions (Hour)' }, { status: 429 });
+                    return NextResponse.json({ error: 'Too Many Impressions (Hour)' }, { status: 202 });
                 }
             } catch (redisErr) {
                 console.warn(`[Security] Redis FID rate limit bypass due to outage.`, redisErr);
@@ -85,11 +85,11 @@ export async function POST(request: Request) {
         const fetchDest = request.headers.get('sec-fetch-dest');
         if (fetchDest === 'script') {
             console.warn(`[Security] Blocked tracking ping from deprecated legacy SDK script.`);
-            return NextResponse.json({ error: 'Legacy script SDK is deprecated. Please upgrade to the secure iframe integration.' }, { status: 403 });
+            return NextResponse.json({ error: 'Legacy script SDK is deprecated. Please upgrade to the secure iframe integration.' }, { status: 202 });
         }
 
         if (!event || !placement || !ad || !ad.id) {
-            return NextResponse.json({ error: 'Missing required tracking parameters' }, { status: 400 });
+            return NextResponse.json({ error: 'Missing required tracking parameters' }, { status: 202 });
         }
 
         if (client_type === 'farcaster') {
@@ -105,14 +105,14 @@ export async function POST(request: Request) {
             
             if (!result.success) {
                 console.error(`[Security] CRITICAL: Fraudulent Farcaster Telemetry Signature Detected for FID: ${fid}`);
-                return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 401 });
+                return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 202 });
             }
         } else if (client_type === 'web') {
             // SECURITY UPGRADE: Cryptographic Impression Validation
             if (event !== 'connect') {
                 if (!sig || !sig.includes(':')) {
                     console.error(`[Security] CRITICAL: Web Telemetry missing HMAC Token for ${event}`);
-                    return NextResponse.json({ error: 'Missing Cryptographic Token.' }, { status: 401 });
+                    return NextResponse.json({ error: 'Missing Cryptographic Token.' }, { status: 202 });
                 }
                 const [adId, pId, ts, clientHmac] = sig.split(':');
                 const tokenSecret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'openads-secure-fallback';
@@ -123,13 +123,13 @@ export async function POST(request: Request) {
                 
                 if (clientHmac !== expectedHmac) {
                     console.error(`[Security] CRITICAL: Fraudulent Web Telemetry Signature Detected for Ad: ${ad.id}`);
-                    return NextResponse.json({ error: 'Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 401 });
+                    return NextResponse.json({ error: 'Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 202 });
                 }
                 
                 // Replay Attack Prevention: Tokens expire strictly after 1 hour
                 if (Date.now() - Number(ts) > 3600000) {
                      console.warn(`[Security] Expired Token execution attempt for Ad: ${ad.id}`);
-                     return NextResponse.json({ error: 'Telemetry Token Expired. Time-Box Enforced.' }, { status: 401 });
+                     return NextResponse.json({ error: 'Telemetry Token Expired. Time-Box Enforced.' }, { status: 202 });
                 }
                 
                 // Replay Attack Prevention 2: One-Time Use Ledger via Redis Distributed Lock
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
                     const isNew = await redis.set(lockKey, 'consumed', { nx: true, ex: 3600 });
                     if (!isNew) {
                          console.error(`[Security] CRITICAL: Replay Attack Blocked! Token already consumed for event: ${event}`);
-                         return NextResponse.json({ error: 'Token already used for this event type. Replay forbidden.' }, { status: 403 });
+                         return NextResponse.json({ error: 'Token already used for this event type. Replay forbidden.' }, { status: 202 });
                     }
                 } catch (redisErr) {
                     console.warn(`[Security] Redis nonce check skipped due to connection offline.`, redisErr);
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
             }
             console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected and MAC Verified: Processing ad ${ad.id}`);
         } else {
-            return NextResponse.json({ error: 'Invalid client authentication channel' }, { status: 400 });
+            return NextResponse.json({ error: 'Invalid client authentication channel' }, { status: 202 });
         }
 
         // Explicit publisher wallet from SDK (data-publisher attribute)
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
         // Relaxed validation: Accept both Web3 hex wallets and scalar Legacy integer App IDs
         if (!publisherWallet || publisherWallet.length < 3) {
              console.error(`[Security] Invalid Publisher Wallet payload format: ${publisherWallet}`);
-             return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 400 });
+             return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 202 });
         }
 
         // NULL_WEB_SIG to satisfy strict DB validations that expect a 132-char hex string 
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
 
         if (!requestHost) {
             console.warn(`[Security] Blocked tracking ping with no Origin/Referer/Parent header: ${ip}`);
-            return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 403 });
+            return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 202 });
         }
 
         // Validate the Publisher's Domain using strict wallet matching
@@ -197,7 +197,7 @@ export async function POST(request: Request) {
         if (appError || !publisherApp) {
             if (requestHost.includes('openads-backend')) {
                  console.warn(`[Security] Referrer-Policy Masking Detected! The parent frame (Miniapp) is blocking Origin routing.`);
-                 return NextResponse.json({ error: 'Strict Referrer-Policy block detected. You must disable `no-referrer` headers on your Miniapp to authenticate telemetry from this domain.' }, { status: 403 });
+                 return NextResponse.json({ error: 'Strict Referrer-Policy block detected. You must disable `no-referrer` headers on your Miniapp to authenticate telemetry from this domain.' }, { status: 202 });
             }
             
             // Gracefully absorb unregistered connect pings to prevent developer console pollution
@@ -207,7 +207,7 @@ export async function POST(request: Request) {
             }
             
             console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
-            return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
+            return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 202 });
         }
 
         // ===============================================
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
         
         if (!publisherApp.logo_url && normalizedEvent !== 'connect') {
             console.warn(`[Security] Blocked Billable Event (${normalizedEvent}) from UNVERIFIED Domain: ${requestHost}`);
-            return NextResponse.json({ error: 'Domain is registered but Logo/Verification missing.' }, { status: 403 });
+            return NextResponse.json({ error: 'Domain is registered but Logo/Verification missing.' }, { status: 202 });
         }
 
         // =========================================================================
@@ -240,14 +240,14 @@ export async function POST(request: Request) {
                     // Strict Check: No View before Click? Discard.
                     if (!viewTs) {
                         console.warn(`[Security] 🚨 Orphaned Click (No preceding view) for Ad ${ad.id} by Actor ${actorKey}. Dropped.`);
-                        return NextResponse.json({ error: 'Orphaned Click Rejected' }, { status: 403 });
+                        return NextResponse.json({ error: 'Orphaned Click Rejected' }, { status: 202 });
                     }
                     
                     const elapsedMs = Date.now() - Number(viewTs);
                     // Minimal physical cognitive reaction time limit (500ms)
                     if (elapsedMs < 500) {
                         console.warn(`[Security] 🚨 Rapid-Click Bot Detected! Speed: ${elapsedMs}ms for Ad ${ad.id}. Dropped.`);
-                        return NextResponse.json({ error: 'Rapid-Click Bot Detected' }, { status: 403 });
+                        return NextResponse.json({ error: 'Rapid-Click Bot Detected' }, { status: 202 });
                     }
                 }
             } catch (redisErr) {
