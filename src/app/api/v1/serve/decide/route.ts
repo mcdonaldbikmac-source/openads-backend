@@ -93,8 +93,14 @@ export async function GET(request: Request) {
         const filteredByPosition = campaigns.filter(camp => {
             const types = camp.ad_type || '';
             
+            // Map abstract semantic Placements to concrete Geometry Dimensions
+            let requiredGeo = requestedFormat;
+            if (requiredGeo === 'floating') requiredGeo = '64x64';
+            if (requiredGeo === 'popup') requiredGeo = '300x250';
+            if (requiredGeo === 'banner') requiredGeo = '320x50';
+            
             // 1. Strict geometry enforcement: The ad MUST match the placement dimensions explicitly.
-            if (requestedFormat !== 'responsive' && !types.includes(requestedFormat) && !types.includes('responsive')) {
+            if (requestedFormat !== 'responsive' && !types.includes(requiredGeo) && !types.includes('responsive')) {
                 return false;
             }
 

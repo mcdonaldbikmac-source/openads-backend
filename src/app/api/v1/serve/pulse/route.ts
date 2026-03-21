@@ -207,11 +207,12 @@ export async function POST(request: Request) {
         // VULNERABILITY N: THE 'COSMETIC Verification' FIX
         // Ensure that Impressions and Clicks are STRICTLY REJECTED if the Publisher has not passed Verification.
         // Connect events (System Pings) are permitted to allow the Crawler to handshake properly.
+        // A truthy logo_url means the crawler successfully reached the domain and verified its identity.
         // ===============================================
         
-        if (publisherApp.logo_url !== 'verified' && normalizedEvent !== 'connect') {
+        if (!publisherApp.logo_url && normalizedEvent !== 'connect') {
             console.warn(`[Security] Blocked Billable Event (${normalizedEvent}) from UNVERIFIED Domain: ${requestHost}`);
-            return NextResponse.json({ error: 'Domain is registered but NOT Verified. Telemetry rejected.' }, { status: 403 });
+            return NextResponse.json({ error: 'Domain is registered but Logo/Verification missing.' }, { status: 403 });
         }
 
         // =========================================================================
