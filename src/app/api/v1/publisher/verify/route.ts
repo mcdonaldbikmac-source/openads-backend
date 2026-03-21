@@ -126,16 +126,30 @@ export async function POST(request: Request) {
                         const lowerHtml = htmlText.toLowerCase();
                         
                         // Strict Regex enforcement to prevent HTML Comment Bypasses (Scenario O)
-                        const hasIframeTag = /<iframe[^>]*src=["'][^"']*openads-backend\.vercel\.app\/serve/i.test(lowerHtml);
-                        const hasSafeWallet = new RegExp(`publisher=${safeWallet}`, 'i').test(lowerHtml);
+                        // Extract OG Image or Favicon for automatic miniapp branding
+                        const ogImageMatch = htmlText.match(/<meta[^>]*property=['"]og:image['"][^>]*content=['"]([^'"]+)['"]/i)
+                           || htmlText.match(/<meta[^>]*content=['"]([^'"]+)['"][^>]*property=['"]og:image['"]/i)
+                           || htmlText.match(/<link[^>]*rel=['"]icon['"][^>]*href=['"]([^'"]+)['"]/i)
+                           || htmlText.match(/<link[^>]*href=['"]([^'"]+)['"][^>]*rel=['"]icon['"]/i);
+                        
+                        let extractedLogo = 'verified';
+                        if (ogImageMatch && ogImageMatch[1]) {
+                            extractedLogo = ogImageMatch[1];
+                            if (extractedLogo.startsWith('/')) {
+                                try {
+                                    const urlObj = new URL(checkUrl);
+                                    extractedLogo = urlObj.origin + extractedLogo;
+                                } catch(e) {}
+                            }
+                        }
                         
                         if (hasIframeTag && hasSafeWallet) {
                             status = 'active'; 
                             
-                            // UX GHOST FIX: Persist verified status
+                            // UX GHOST FIX: Persist verified status and brand logo!
                             await supabase
                                 .from('apps')
-                                .update({ logo_url: 'verified' })
+                                .update({ logo_url: extractedLogo })
                                 .eq('id', appData[0].id);
                         }
                     }
