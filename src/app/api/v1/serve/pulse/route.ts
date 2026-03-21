@@ -199,6 +199,13 @@ export async function POST(request: Request) {
                  console.warn(`[Security] Referrer-Policy Masking Detected! The parent frame (Miniapp) is blocking Origin routing.`);
                  return NextResponse.json({ error: 'Strict Referrer-Policy block detected. You must disable `no-referrer` headers on your Miniapp to authenticate telemetry from this domain.' }, { status: 403 });
             }
+            
+            // Gracefully absorb unregistered connect pings to prevent developer console pollution
+            if (normalizedEvent === 'connect') {
+                 console.warn(`[Security] Absorbed unregistered domain connection handshake: ${requestHost}`);
+                 return NextResponse.json({ status: 'unregistered', message: 'Domain not verified. Muted connection.' }, { status: 202 });
+            }
+            
             console.warn(`[Security] Click Fraud Attempt! Unauthorized domain ${requestHost} trying to track for wallet ${publisherWallet}`);
             return NextResponse.json({ error: 'Unauthorized Domain for this Publisher Wallet.' }, { status: 403 });
         }
