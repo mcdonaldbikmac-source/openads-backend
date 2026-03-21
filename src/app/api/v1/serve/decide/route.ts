@@ -98,8 +98,10 @@ export async function GET(request: Request) {
                 return false;
             }
 
-            // 2. Legacy position enforcement (if present, bypassed for responsive wildcards)
-            if (position !== 'all' && requestedFormat !== 'responsive') {
+            // 2. Strict Position Geometry Enforcement: Prevent massive graphical payloads from crashing micro-containers.
+            // Even if the placement itself is explicitly 'responsive', if the requested frontend container is 'floating',
+            // we MUST forcefully restrict the auction candidates to '64x64' campaigns.
+            if (position !== 'all') {
                 if (position === 'top' || position === 'bottom') return types.includes('320x50') || types.includes('responsive');
                 if (position === 'popup') return types.includes('300x250') || types.includes('responsive');
                 if (position === 'floating') return types.includes('64x64') || types.includes('responsive');
