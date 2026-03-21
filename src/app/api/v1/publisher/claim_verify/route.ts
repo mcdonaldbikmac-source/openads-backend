@@ -64,7 +64,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Failed to verify blockchain transaction.' }, { status: 500 });
         }
 
-        // 3. Mathematical DB Synchronization
+        // 3. Atomically lock the txHash as CONSUMED in the ledger (Atomic Protection)
+        const { error: insertError } = await supabase.from('vouchers').insert([
+            { code: txHash, status: 'consumed', amount_usd: Number(ethers.formatUnits(amountWeiFromBlockchain.toString(), 6)), used_by_wallet: wallet, campaign_id: null }
+        ]);
+        
+        if (insertError) {
+             console.error(`[Security] Race condition blocked! txHash ${txHash} was already consumed by a parallel thread.`);
+             return NextResponse.json({ error: 'Transaction has already been processed.' }, { status: 403 });
+        }
+
+        // 4. Mathematical DB Synchronization
         // Calculate exactly what the new paid_out_wei should be to keep the DB in perfect sync with the Blockchain
         const { data: pubData, error: fetchErr } = await supabase
             .from('publishers')
@@ -87,11 +97,6 @@ export async function POST(request: Request) {
         if (updateErr) {
             return NextResponse.json({ error: 'Blockchain Verification Passed, but Database Update Failed.' }, { status: 500 });
         }
-
-        // 4. Mark the transaction as consumed to prevent future DB tampering
-        await supabase.from('vouchers').insert([
-            { code: txHash, status: 'consumed', amount_usd: Number(ethers.formatUnits(amountWeiFromBlockchain.toString(), 6)), used_by_wallet: wallet, campaign_id: null }
-        ]);
 
         return NextResponse.json({ 
             success: true, 

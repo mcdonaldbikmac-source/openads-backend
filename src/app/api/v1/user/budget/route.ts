@@ -115,13 +115,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }
 
-        // Lock the txHash as CONSUMED in the ledger
-        await supabase.from('vouchers').insert([{
+        // Lock the txHash as CONSUMED in the ledger (Atomic Protection)
+        const { error: insertError } = await supabase.from('vouchers').insert([{
             code: txHash,
             amount: Number(ethers.formatUnits(amountWeiFromBlockchain, 6)),
             is_used: true,
             used_by_wallet: signer_wallet
         }]);
+        
+        if (insertError) {
+             console.error(`[Security] Race condition blocked! txHash ${txHash} was already consumed by a parallel thread.`);
+             return NextResponse.json({ error: 'Transaction has already been used. Double-Spend Blocked.' }, { status: 403 });
+        }
 
         // Add dynamically extracted mathematical amount to budget_wei
         const currentBudgetWei = BigInt(String(campaign.budget_wei || '0').split('.')[0]);
