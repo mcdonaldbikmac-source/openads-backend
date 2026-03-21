@@ -301,14 +301,53 @@ export async function POST(request: Request) {
         // =========================================================================
         // SECURITY UPDATE: Restore Publisher Verification (Soft-Lock Fix)
         // If this is the very first valid ping from the authorized domain, 
-        // mark it as 'verified' in the DB to unlock the Dashboard UI.
+        // scrape its organic branding and unlock the Dashboard UI.
         // =========================================================================
         if (!publisherApp.logo_url) {
+            let extractedLogo = 'verified';
+            try {
+                let checkUrl = publisherApp.domain || requestHost;
+                if (!checkUrl.startsWith('http')) checkUrl = 'https://' + checkUrl;
+                
+                const controller = new AbortController();
+                // Extremely tight timeout ceiling to guarantee the heartbeat API doesn't hang
+                const timeoutId = setTimeout(() => controller.abort(), 2000); 
+                
+                const htmlRes = await fetch(checkUrl, { 
+                    signal: controller.signal,
+                    headers: { 'User-Agent': 'OpenAds-Verification-Bot/1.0' },
+                    cache: 'no-store'
+                });
+                clearTimeout(timeoutId);
+                
+                if (htmlRes.ok) {
+                    const htmlText = await htmlRes.text();
+                    const limitedHtml = htmlText.substring(0, 1024 * 512); // Buffer bound: 512KB for speed
+                    
+                    const ogImageMatch = limitedHtml.match(/<meta[^>]*property=['"]og:image['"][^>]*content=['"]([^'"]+)['"]/i)
+                       || limitedHtml.match(/<meta[^>]*content=['"]([^'"]+)['"][^>]*property=['"]og:image['"]/i)
+                       || limitedHtml.match(/<link[^>]*rel=['"]icon['"][^>]*href=['"]([^'"]+)['"]/i)
+                       || limitedHtml.match(/<link[^>]*href=['"]([^'"]+)['"][^>]*rel=['"]icon['"]/i);
+                       
+                    if (ogImageMatch && ogImageMatch[1]) {
+                        extractedLogo = ogImageMatch[1];
+                        if (extractedLogo.startsWith('/')) {
+                            try {
+                                const urlObj = new URL(checkUrl);
+                                extractedLogo = urlObj.origin + extractedLogo;
+                            } catch(e) {}
+                        }
+                    }
+                }
+            } catch (crawlErr: any) {
+                console.warn(`[Pulse Auto-Scrape] Failed to auto-extract logo for ${requestHost}:`, crawlErr.message || crawlErr);
+            }
+            
             await supabase
                 .from('apps')
-                .update({ logo_url: 'verified' })
+                .update({ logo_url: extractedLogo })
                 .eq('id', publisherApp.id);
-            console.log(`[OpenAds Backend API] ✅ Publisher App ${publisherApp.id} successfully verified via first ping!`);
+            console.log(`[OpenAds Backend API] ✅ Publisher App ${publisherApp.id} verified natively. Logo: ${extractedLogo}`);
         }
 
 
