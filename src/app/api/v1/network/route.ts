@@ -13,10 +13,14 @@ export async function GET() {
 
         if (error) throw error;
 
-        // Mathematical Base64 SVGs to bypass CDN Hotlink Protections
-        const baseSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%230052FF" rx="50"/><circle cx="50" cy="50" r="20" fill="white"/></svg>`;
-        const fcSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%238a2be2" rx="20"/><text x="50" y="65" font-family="Arial" font-size="50" fill="white" text-anchor="middle" font-weight="bold">F</text></svg>`;
-        const webSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333333" rx="20"/><text x="50" y="65" font-family="Arial" font-size="50" fill="white" text-anchor="middle" font-weight="bold">W</text></svg>`;
+        // URL-Encoded Base64 SVGs to bypass HTML Double-Quote attribute crashing
+        const baseSvgRaw = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0052FF" rx="50"/><circle cx="50" cy="50" r="20" fill="white"/></svg>`;
+        const fcSvgRaw = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#8a2be2" rx="20"/><text x="50" y="65" font-family="Arial" font-size="50" fill="white" text-anchor="middle" font-weight="bold">F</text></svg>`;
+        const webSvgRaw = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#333333" rx="20"/><text x="50" y="65" font-family="Arial" font-size="50" fill="white" text-anchor="middle" font-weight="bold">W</text></svg>`;
+
+        const baseSvg = 'data:image/svg+xml,' + encodeURIComponent(baseSvgRaw);
+        const fcSvg = 'data:image/svg+xml,' + encodeURIComponent(fcSvgRaw);
+        const webSvg = 'data:image/svg+xml,' + encodeURIComponent(webSvgRaw);
 
         // Map to a simpler format for the landing page marquee
         const publishers = (data || []).map(app => {
