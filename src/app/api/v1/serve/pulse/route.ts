@@ -303,15 +303,15 @@ export async function POST(request: Request) {
         // If this is the very first valid ping from the authorized domain, 
         // scrape its organic branding and unlock the Dashboard UI.
         // =========================================================================
-        if (!publisherApp.logo_url) {
-            let extractedLogo = 'verified';
+        if (!publisherApp.logo_url || publisherApp.logo_url === 'verified') {
+            let extractedLogo = 'verified'; // Default to verified to block infinite scraping loops on empty sites
             try {
                 let checkUrl = publisherApp.domain || requestHost;
                 if (!checkUrl.startsWith('http')) checkUrl = 'https://' + checkUrl;
                 
                 const controller = new AbortController();
-                // Extremely tight timeout ceiling to guarantee the heartbeat API doesn't hang
-                const timeoutId = setTimeout(() => controller.abort(), 2000); 
+                // Extended timeout to 4000ms to accommodate Vercel Edge cold starts
+                const timeoutId = setTimeout(() => controller.abort(), 4000); 
                 
                 const htmlRes = await fetch(checkUrl, { 
                     signal: controller.signal,
@@ -327,7 +327,9 @@ export async function POST(request: Request) {
                     const ogImageMatch = limitedHtml.match(/<meta[^>]*property=['"]og:image['"][^>]*content=['"]([^'"]+)['"]/i)
                        || limitedHtml.match(/<meta[^>]*content=['"]([^'"]+)['"][^>]*property=['"]og:image['"]/i)
                        || limitedHtml.match(/<link[^>]*rel=['"]icon['"][^>]*href=['"]([^'"]+)['"]/i)
-                       || limitedHtml.match(/<link[^>]*href=['"]([^'"]+)['"][^>]*rel=['"]icon['"]/i);
+                       || limitedHtml.match(/<link[^>]*href=['"]([^'"]+)['"][^>]*rel=['"]icon['"]/i)
+                       || limitedHtml.match(/\\"property\\":\\"og:image\\",\\"content\\":\\"([^\\"]+)\\"/i)
+                       || limitedHtml.match(/"property":"og:image","content":"([^"]+)"/i);
                        
                     if (ogImageMatch && ogImageMatch[1]) {
                         extractedLogo = ogImageMatch[1];
@@ -347,6 +349,7 @@ export async function POST(request: Request) {
                 .from('apps')
                 .update({ logo_url: extractedLogo })
                 .eq('id', publisherApp.id);
+
             console.log(`[OpenAds Backend API] ✅ Publisher App ${publisherApp.id} verified natively. Logo: ${extractedLogo}`);
         }
 

@@ -127,10 +127,12 @@ export async function POST(request: Request) {
                         
                         // Strict Regex enforcement to prevent HTML Comment Bypasses (Scenario O)
                         // Extract OG Image or Favicon for automatic miniapp branding
-                        const ogImageMatch = htmlText.match(/<meta[^>]*property=['"]og:image['"][^>]*content=['"]([^'"]+)['"]/i)
-                           || htmlText.match(/<meta[^>]*content=['"]([^'"]+)['"][^>]*property=['"]og:image['"]/i)
-                           || htmlText.match(/<link[^>]*rel=['"]icon['"][^>]*href=['"]([^'"]+)['"]/i)
-                           || htmlText.match(/<link[^>]*href=['"]([^'"]+)['"][^>]*rel=['"]icon['"]/i);
+                        const ogImageMatch = lowerHtml.match(/<meta[^>]*property=['"]og:image['"][^>]*content=['"]([^'"]+)['"]/i)
+                           || lowerHtml.match(/<meta[^>]*content=['"]([^'"]+)['"][^>]*property=['"]og:image['"]/i)
+                           || lowerHtml.match(/<link[^>]*rel=['"]icon['"][^>]*href=['"]([^'"]+)['"]/i)
+                           || lowerHtml.match(/<link[^>]*href=['"]([^'"]+)['"][^>]*rel=['"]icon['"]/i)
+                           || lowerHtml.match(/\\"property\\":\\"og:image\\",\\"content\\":\\"([^\\"]+)\\"/i)
+                           || lowerHtml.match(/"property":"og:image","content":"([^"]+)"/i);
                         
                         let extractedLogo = 'verified';
                         if (ogImageMatch && ogImageMatch[1]) {
