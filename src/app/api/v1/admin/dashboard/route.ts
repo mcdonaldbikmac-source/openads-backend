@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
+import { verifyAdminAuth } from '../auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
+        await verifyAdminAuth(req);
+
         // 1. Total Publishers (Websites & DApps)
         const { count: pubCount } = await supabase
             .from('apps')
@@ -55,7 +58,8 @@ export async function GET() {
         );
     } catch (err: any) {
         console.error('Admin KPI API Error:', err);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+        const status = err.message === 'Forbidden' ? 403 : (err.message === 'Unauthorized' ? 401 : 500);
+        return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 }
 

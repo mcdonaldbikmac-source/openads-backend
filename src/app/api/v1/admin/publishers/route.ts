@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
+import { verifyAdminAuth } from '../auth';
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: Request) {
     try {
-        // 1. Fetch genuine physical applications from the network ledger
+        await verifyAdminAuth(req);
+
+        // Fetch all verified publishersical applications from the network ledger
         const { data: apps, error: appsError } = await supabase
             .from('apps')
             .select('*')
@@ -61,9 +66,10 @@ export async function GET() {
                 },
             }
         );
-    } catch (err: any) {
-        console.error('Admin Fetch Error:', err);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    } catch (e: any) {
+        console.error('Admin Publishers Route Error:', e);
+        const status = e.message === 'Forbidden' ? 403 : (e.message === 'Unauthorized' ? 401 : 500);
+        return NextResponse.json({ error: e.message || 'Error fetching publishers' }, { status, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 }
 

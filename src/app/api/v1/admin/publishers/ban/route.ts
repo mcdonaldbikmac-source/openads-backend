@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
+import { verifyAdminAuth } from '../../auth';
 
 export async function DELETE(req: Request) {
     try {
+        await verifyAdminAuth(req);
+
         const body = await req.json();
         const { app_id } = body;
 
@@ -31,7 +34,8 @@ export async function DELETE(req: Request) {
 
     } catch (e: any) {
         console.error('[Admin API] Exception:', e);
-        return NextResponse.json({ error: e.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+        const status = e.message === 'Forbidden' ? 403 : (e.message === 'Unauthorized' ? 401 : 500);
+        return NextResponse.json({ error: e.message || 'Error executing ban' }, { status, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 }
 

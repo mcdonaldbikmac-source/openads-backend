@@ -9,7 +9,7 @@ export async function GET(request: Request) {
         const publisherWallet = searchParams.get('publisher');
 
         if (!publisherWallet) {
-            return new NextResponse('.openads-frame { display: none !important; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
+            return new NextResponse('.openads-frame { display: none !important; }', { headers: { 'Content-Type': 'text/css', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' } });
         }
 
         const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
         }
 
         if (isPaused) {
-            return new NextResponse('.openads-frame { display: none !important; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
+            return new NextResponse('.openads-frame { display: none !important; }', { headers: { 'Content-Type': 'text/css', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' } });
         }
 
         const { data: campaigns, error } = await supabase
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
             .eq('status', 'active');
 
         if (error || !campaigns || campaigns.length === 0) {
-            return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
+            return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' } });
         }
 
         const now = new Date();
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
         });
 
         if (eligibleCampaigns.length === 0) {
-            return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' } });
+            return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' } });
         }
 
         eligibleCampaigns.sort((a, b) => {
@@ -163,11 +163,12 @@ export async function GET(request: Request) {
         return new NextResponse(cssPayload, {
             headers: {
                 'Content-Type': 'text/css',
+                'X-Content-Type-Options': 'nosniff',
                 'Cache-Control': 'no-store, max-age=0, must-revalidate',
                 'Pragma': 'no-cache'
             }
         });
     } catch (e) {
-        return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css' } });
+        return new NextResponse('.openads-frame { display: none; }', { headers: { 'Content-Type': 'text/css', 'X-Content-Type-Options': 'nosniff' } });
     }
 }

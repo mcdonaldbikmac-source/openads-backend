@@ -73,16 +73,13 @@ export async function POST(request: Request) {
         // Calculate cryptographic delta to prevent DB locking race conditions
         const pending = BigInt(newPaidOut) - BigInt(currentPaidOut);
 
-        if (pending > BigInt(0)) {
-            const { error: updateErr } = await supabase
-                .from('publishers')
-                .update({ paid_out_wei: newPaidOut })
-                .eq('wallet', wallet);
-
-            if (updateErr) {
-                return NextResponse.json({ error: 'Failed to update claim status' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
-            }
+        if (pending <= BigInt(0)) {
+            return NextResponse.json({ error: 'No pending earnings to claim.' }, { status: 400 });
         }
+        
+        // SECURITY NOTE: The database `paid_out_wei` lock has been removed from this stage.
+        // It will be exclusively updated post-transaction by reading the on-chain RPC logs, 
+        // completely neutralizing the UX failure loop where failed transactions freeze pending balances.
 
         // 4. Generate the Server-Side ECDSA Signature for the Smart Contract
         // The OpenAdsVault expects a signature over: keccak256(abi.encodePacked(publisherWallet, token, amount))

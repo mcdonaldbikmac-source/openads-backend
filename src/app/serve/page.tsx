@@ -14,6 +14,7 @@ function AdFrameContent() {
     const isPreview = searchParams.get('preview') === 'true';
 
     const [adData, setAdData] = useState<any>(null);
+    const [serveToken, setServeToken] = useState<string>('verified_origin');
     const [loading, setLoading] = useState(true);
     const [hasTrackedImpression, setHasTrackedImpression] = useState(false);
     
@@ -53,6 +54,7 @@ function AdFrameContent() {
                 // Dashboard Preview Mode: Render ad unconditionally without enforcing sessionStorage history
                 if (data.ad && (isPreview || !sessionStorage.getItem(`openads_closed_${data.ad.id}`))) {
                     setAdData(data.ad);
+                    if (data.serve_token) setServeToken(data.serve_token);
                     
                     // Native Dimension Morphing Dispatch
                     if (placementId && placementId.includes('responsive')) {
@@ -105,7 +107,7 @@ function AdFrameContent() {
                                     publisher: publisherWallet,
                                     fid,
                                     logo: searchParams.get('logo') || '',
-                                    sig: 'verified_origin',
+                                    sig: serveToken,
                                     message: `impression:${placementId}:${publisherWallet}`,
                                     parent_url: document.referrer || window.location.href
                                 })
@@ -141,7 +143,7 @@ function AdFrameContent() {
                 placement: placementId,
                 publisher: publisherWallet,
                 fid,
-                sig: 'verified_origin',
+                sig: serveToken,
                 message: `click:${adData.id}:${placementId}:${publisherWallet}`
             }),
             keepalive: true // Crucial for navigating away smoothly

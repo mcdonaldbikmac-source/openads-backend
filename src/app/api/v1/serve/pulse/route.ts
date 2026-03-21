@@ -5,11 +5,24 @@ import { createAppClient, viemConnector } from '@farcaster/auth-client';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// Create a new ratelimiter, that allows 5 requests per 5 seconds
+// Basic IP rate limiter: 5 requests per 5 seconds
 const ratelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   limiter: Ratelimit.slidingWindow(5, '5 s'),
   analytics: true,
+});
+
+// Advanced Anti-Fraud: FID Rate Limiters
+const fidPerMinRatelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, '1 m'), // 10 impressions max per minute
+  analytics: false,
+});
+
+const fidPerHourRatelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(30, '1 h'), // 30 impressions max per hour
+  analytics: false,
 });
 
 const appClient = createAppClient({
@@ -36,6 +49,35 @@ export async function POST(request: Request) {
 
         const payload = await request.json();
         const { event, placement, publisher, fid, sig, message, nonce, ad, client_type = 'farcaster', logo } = payload;
+        
+        const safeFidStr = String(fid || '0');
+
+        // Normalize event name (SDK sends 'impression', RPC expects 'view')
+        let normalizedEvent = 'click';
+        if (event === 'impression' || event === 'view') normalizedEvent = 'view';
+        if (event === 'connect') normalizedEvent = 'connect';
+
+        // =========================================================================
+        // FEATURE: Advanced FID-Based Rate Limiting (Anti-Bot Farm)
+        // =========================================================================
+        if (normalizedEvent === 'view' && safeFidStr !== '0' && safeFidStr !== 'undefined') {
+            try {
+                // Minutely limit
+                const { success: successMin } = await fidPerMinRatelimit.limit(`fid_min_${safeFidStr}`);
+                if (!successMin) {
+                    console.warn(`[OpenAds Security] 🚨 FID Minutely Rate Limit Exceeded for FID: ${safeFidStr}. Bot farm detected. Request blocked.`);
+                    return NextResponse.json({ error: 'Too Many Impressions (Minute)' }, { status: 429 });
+                }
+                // Hourly limit
+                const { success: successHour } = await fidPerHourRatelimit.limit(`fid_hour_${safeFidStr}`);
+                if (!successHour) {
+                    console.warn(`[OpenAds Security] 🚨 FID Hourly Rate Limit Exceeded for FID: ${safeFidStr}. Request blocked.`);
+                    return NextResponse.json({ error: 'Too Many Impressions (Hour)' }, { status: 429 });
+                }
+            } catch (redisErr) {
+                console.warn(`[Security] Redis FID rate limit bypass due to outage.`, redisErr);
+            }
+        }
 
         // =========================================================================
         // EDGE CASE 1: Legacy SDK Block (Enforce iframe)
@@ -66,7 +108,44 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 401 });
             }
         } else if (client_type === 'web') {
-            console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected: Processing ad ${ad.id}`);
+            // SECURITY UPGRADE: Cryptographic Impression Validation
+            if (event !== 'connect') {
+                if (!sig || !sig.includes(':')) {
+                    console.error(`[Security] CRITICAL: Web Telemetry missing HMAC Token for ${event}`);
+                    return NextResponse.json({ error: 'Missing Cryptographic Token.' }, { status: 401 });
+                }
+                const [adId, pId, ts, clientHmac] = sig.split(':');
+                const tokenSecret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'openads-secure-fallback';
+                
+                // Dynamically import crypto for Next.js Route Handler compatibility
+                const crypto = require('crypto');
+                const expectedHmac = crypto.createHmac('sha256', tokenSecret).update(`${adId}:${pId}:${ts}`).digest('hex');
+                
+                if (clientHmac !== expectedHmac) {
+                    console.error(`[Security] CRITICAL: Fraudulent Web Telemetry Signature Detected for Ad: ${ad.id}`);
+                    return NextResponse.json({ error: 'Cryptographic Signature Invalid. Click/Impression rejected by OpenAds.' }, { status: 401 });
+                }
+                
+                // Replay Attack Prevention: Tokens expire strictly after 1 hour
+                if (Date.now() - Number(ts) > 3600000) {
+                     console.warn(`[Security] Expired Token execution attempt for Ad: ${ad.id}`);
+                     return NextResponse.json({ error: 'Telemetry Token Expired. Time-Box Enforced.' }, { status: 401 });
+                }
+                
+                // Replay Attack Prevention 2: One-Time Use Ledger via Redis Distributed Lock
+                try {
+                    const redis = Redis.fromEnv();
+                    const lockKey = `openads_nonce_${event}_${clientHmac}`;
+                    const isNew = await redis.set(lockKey, 'consumed', { nx: true, ex: 3600 });
+                    if (!isNew) {
+                         console.error(`[Security] CRITICAL: Replay Attack Blocked! Token already consumed for event: ${event}`);
+                         return NextResponse.json({ error: 'Token already used for this event type. Replay forbidden.' }, { status: 403 });
+                    }
+                } catch (redisErr) {
+                    console.warn(`[Security] Redis nonce check skipped due to connection offline.`, redisErr);
+                }
+            }
+            console.log(`[OpenAds Backend API] 🌍 Web Traffic Detected and MAC Verified: Processing ad ${ad.id}`);
         } else {
             return NextResponse.json({ error: 'Invalid client authentication channel' }, { status: 400 });
         }
@@ -85,11 +164,6 @@ export async function POST(request: Request) {
             console.warn(`[Security] Blocked tracking ping with malformed wallet: ${publisherWallet}`);
             return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 400 });
         }
-
-        // Normalize event name (SDK sends 'impression', RPC expects 'view')
-        let normalizedEvent = 'click';
-        if (event === 'impression' || event === 'view') normalizedEvent = 'view';
-        if (event === 'connect') normalizedEvent = 'connect';
 
         // NULL_WEB_SIG to satisfy strict DB validations that expect a 132-char hex string 
         const NULL_WEB_SIG = '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
@@ -138,6 +212,39 @@ export async function POST(request: Request) {
         if (publisherApp.logo_url !== 'verified' && normalizedEvent !== 'connect') {
             console.warn(`[Security] Blocked Billable Event (${normalizedEvent}) from UNVERIFIED Domain: ${requestHost}`);
             return NextResponse.json({ error: 'Domain is registered but NOT Verified. Telemetry rejected.' }, { status: 403 });
+        }
+
+        // =========================================================================
+        // SECURITY UPGRADE: Rapid-Click Block (Anti-Bot)
+        // Prevents Auto-clickers that fire immediately after a view.
+        // =========================================================================
+        if ((normalizedEvent === 'view' || normalizedEvent === 'click') && ad && ad.id) {
+            try {
+                const redis = Redis.fromEnv();
+                // Combine IP, FID, and Ad ID as the unique actor identifier for this session
+                const actorKey = `actor_${ip}_${safeFidStr}_${ad.id}`;
+                
+                if (normalizedEvent === 'view') {
+                    // Log the timestamp of the view
+                    await redis.set(`view_ts_${actorKey}`, Date.now(), { ex: 3600 });
+                } else if (normalizedEvent === 'click') {
+                    const viewTs = await redis.get(`view_ts_${actorKey}`);
+                    // Strict Check: No View before Click? Discard.
+                    if (!viewTs) {
+                        console.warn(`[Security] 🚨 Orphaned Click (No preceding view) for Ad ${ad.id} by Actor ${actorKey}. Dropped.`);
+                        return NextResponse.json({ error: 'Orphaned Click Rejected' }, { status: 403 });
+                    }
+                    
+                    const elapsedMs = Date.now() - Number(viewTs);
+                    // Minimal physical cognitive reaction time limit (500ms)
+                    if (elapsedMs < 500) {
+                        console.warn(`[Security] 🚨 Rapid-Click Bot Detected! Speed: ${elapsedMs}ms for Ad ${ad.id}. Dropped.`);
+                        return NextResponse.json({ error: 'Rapid-Click Bot Detected' }, { status: 403 });
+                    }
+                }
+            } catch (redisErr) {
+                console.warn(`[Security] Redis Rapid-Click check skipped due to connection error.`, redisErr);
+            }
         }
 
         // =========================================================================

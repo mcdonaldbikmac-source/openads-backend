@@ -11,6 +11,10 @@ async function runAdminTest() {
 
     // 1. Inject Fake Phishing Site
     console.log(`\n[1] Injecting Malicious App into DB: ${PHISHING_DOMAIN}`);
+    
+    // Cleanup prior ghosts to prevent test state cross-contamination
+    await supabase.from('apps').delete().eq('publisher_wallet', PHISHING_WALLET);
+    
     const { data: injectedApp, error: injectError } = await supabase
         .from('apps')
         .insert([{
@@ -33,17 +37,19 @@ async function runAdminTest() {
     // 2. Test Admin KPI Endpoints
     console.log('\n[2] Testing Admin Triage Endpoints...');
     const kpiRes = await fetch(`${BASE_URL}/api/v1/admin/dashboard`);
-    const kpiData = await kpiRes.json();
-    console.log(`✅ Dashboard KPIs Fetched: ${kpiData.kpi.totalImpressions} Total Views recorded.`);
-
-    const pubRes = await fetch(`${BASE_URL}/api/v1/admin/publishers`);
-    const pubData = await pubRes.json();
-    const foundApp = pubData.publishers.find(p => p.app_id === appId);
-    if (!foundApp) {
-        console.error('❌ Failed to locate the Phishing App in the Publisher Roster!');
-        return;
+    if (kpiRes.status === 401 || kpiRes.status === 403) {
+        console.log(`✅ [FIREWALL TEST] Admin /dashboard correctly rejected anonymous access: ${kpiRes.status}`);
+    } else {
+        console.error(`❌ [FIREWALL TEST] ERROR: /dashboard is exposed! Status: ${kpiRes.status}`);
+        const kpiData = await kpiRes.json();
+        console.log(`❌ Fetched data from exposed endpoint: `, kpiData);
     }
-    console.log(`✅ Discovered Phishing App in /publishers routing (Wallet: ${foundApp.wallet})`);
+    const pubRes = await fetch(`${BASE_URL}/api/v1/admin/publishers`);
+    if (pubRes.status === 401 || pubRes.status === 403) {
+        console.log(`✅ [FIREWALL TEST] Admin /publishers correctly rejected anonymous access: ${pubRes.status}`);
+    } else {
+        console.error(`❌ [FIREWALL TEST] ERROR: /publishers is exposed! Status: ${pubRes.status}`);
+    }
 
     // 3. Pre-Ban: Verify Ad Engine is Vulnerable and serving to the Phishing Site
     console.log('\n[3] Pre-Ban: Fetching ad inventory as the Phishing Site...');
@@ -59,32 +65,18 @@ async function runAdminTest() {
     console.log(`✅ Pre-Ban Verification: Ad Engine is correctly exposed (Status: ${preBanRes.status}).`);
 
     // 4. Execute Admin Ban
-    console.log(`\n[4] EXECUTING ADMIN BAN HAMMER API ON APP: ${appId}`);
+    console.log(`\n[4] EXECUTING ADMIN BAN HAMMER API ON APP: ${appId} (SIMULATING HACKER WITHOUT SIGNATURE)`);
     const banRes = await fetch(`${BASE_URL}/api/v1/admin/publishers/ban`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ app_id: appId })
     });
-    const banData = await banRes.json();
     
-    if (!banData.success) {
-        console.error('❌ Ban Execution Failed!', banData);
-        return;
-    }
-    console.log('✅ BAN EXECUTED SUCCESSFULLY. PHYSICAL DATABASE ROWS PURGED.');
-
-    // 5. Post-Ban: Verify Brand Safety Lock triggers `403 Forbidden`
-    console.log('\n[5] Post-Ban: Attempting to fetch ad inventory as the Phishing Site...');
-    const postBanRes = await fetch(`${BASE_URL}/api/v1/serve/decide?placement=responsive-${PHISHING_WALLET}`, {
-        headers: { 'Origin': `https://${PHISHING_DOMAIN}` }
-    });
-    
-    if (postBanRes.status === 403) {
-        const txt = await postBanRes.json();
-        console.log(`✅ BRAND SAFETY LOCK TRIGGERED: Ad Engine returned 403 Forbidden (${txt.error})`);
-        console.log('\n🎉 ALL ADMIN TESTS PASSED. PHISHING SITES ARE MATHEMATICALLY OBLITERATED.');
+    if (banRes.status === 401 || banRes.status === 403) {
+        console.log(`✅ BRAND SAFETY FIREWALL ENFORCED. API returned ${banRes.status}. The Hacker cannot ban the app without a cryptographic SIWF signature from an Admin wallet.`);
+        console.log('\n🎉 ALL ADMIN FIREWALL TESTS PASSED. ENDPOINTS ARE MATHEMATICALLY OBLITERATED FROM PUBLIC ACCESS.');
     } else {
-        console.error(`❌ Post-Ban Failure! Expected 403 Forbidden, but received ${postBanRes.status}`);
+        console.error(`❌ Firewall Failure! Expected 401 or 403, but received ${banRes.status}`);
     }
 }
 

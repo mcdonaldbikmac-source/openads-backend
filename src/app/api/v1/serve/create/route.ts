@@ -17,6 +17,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required ad fields' }, { status: 400 });
         }
 
+        // SECURITY UPGRADE: Strict Platform Dimension Geometry Whitelist
+        const allowedSizes = ['64x64', '300x250', '320x50', '300x50', '320x100'];
+        if (!allowedSizes.includes(size)) {
+            console.warn(`[Security] Blocked unauthorized ad dimension payload attempted by ${advertiser}: ${size}`);
+            return NextResponse.json({ error: `Invalid ad dimension. Must be one of: ${allowedSizes.join(', ')}` }, { status: 400 });
+        }
+
         // XSS & Security Validation for the Destination URL
         try {
             const parsedUrl = new URL(url);
