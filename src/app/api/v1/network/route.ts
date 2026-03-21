@@ -16,7 +16,7 @@ export async function GET() {
         // Map to a simpler format for the landing page marquee
         const publishers = (data || []).map(app => {
             let userIcon = 'https://cdn.worldvectorlogo.com/logos/base-2.svg'; // Default Base logo
-            if (app.logo_url) {
+            if (app.logo_url && app.logo_url !== 'verified') {
                 userIcon = app.logo_url;
             } else if (app.app_type === 'miniapp') {
                 userIcon = 'https://seeklogo.com/images/F/farcaster-logo-F91A2DCBBA-seeklogo.com.png';
