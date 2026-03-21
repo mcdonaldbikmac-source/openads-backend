@@ -24,7 +24,11 @@ export async function GET(request: Request) {
         // Check if the requesting app domain is marked as "paused_"
         // ==========================================
         const clientReportedParent = searchParams.get('parent_url');
-        const originHeader = clientReportedParent || request.headers.get('origin') || request.headers.get('referer') || '';
+        let originHeader = request.headers.get('origin') || request.headers.get('referer');
+        if (!originHeader) {
+            originHeader = clientReportedParent || '';
+            console.warn(`[Security] Missing Origin/Referer in /decide. Falling back to payload: ${originHeader}`);
+        }
         let requestHost = '';
         try { requestHost = new URL(originHeader).host; } catch(e) {}
         

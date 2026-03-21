@@ -172,14 +172,13 @@ export async function POST(request: Request) {
         // SECURITY UPDATE: Strict Domain Authentication mapped to Publisher Wallet
         // We use payload.parent_url sent from the iframe to resolve the true domain.
         // =========================================================================
-        const originHeader = request.headers.get('origin') || request.headers.get('referer') || '';
+        let originHeader = request.headers.get('origin') || request.headers.get('referer');
+        if (!originHeader) {
+            originHeader = payload.parent_url || '';
+            console.warn(`[Security] Missing strict Origin/Referer in /pulse. Falling back to payload: ${originHeader}`);
+        }
         let requestHost = '';
-        if (payload.parent_url) {
-            try { requestHost = new URL(payload.parent_url).host; } catch(e) {}
-        }
-        if (!requestHost) {
-            try { requestHost = new URL(originHeader).host; } catch(e) {}
-        }
+        try { requestHost = new URL(originHeader as string).host; } catch(e) {}
 
         if (!requestHost) {
             console.warn(`[Security] Blocked tracking ping with no Origin/Referer/Parent header: ${ip}`);

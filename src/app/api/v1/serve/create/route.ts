@@ -142,13 +142,18 @@ export async function POST(request: Request) {
 
                 validatedBudget = Number(ethers.formatUnits(amountWeiFromBlockchain, 6));
 
-                // Lock the txHash as CONSUMED in the ledger
-                await supabase.from('vouchers').insert([{
+                // Lock the txHash as CONSUMED in the ledger (Atomic Protection)
+                const { error: insertError } = await supabase.from('vouchers').insert([{
                     code: txHash,
                     amount: validatedBudget,
                     is_used: true,
                     used_by_wallet: signer_wallet
                 }]);
+                
+                if (insertError) {
+                     console.error(`[Security] Race condition blocked! txHash ${txHash} was just consumed by a parallel thread.`);
+                     return NextResponse.json({ error: 'Transaction has already been used. Double-Spend Blocked.' }, { status: 403 });
+                }
 
             } catch (rpcErr) {
                 console.error('[Security] RPC TxHash Verification Failed in Campaign Create:', rpcErr);
