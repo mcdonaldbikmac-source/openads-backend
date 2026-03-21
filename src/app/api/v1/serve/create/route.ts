@@ -211,13 +211,16 @@ export async function POST(request: Request) {
         const cpmWei = ethers.parseUnits(cpm.toString(), 6).toString();
 
         // 3. Save Ad Campaign to Supabase PostgreSQL Database
+        // Serialize the txHash into the creative_url hash fragment to persist it without schema migrations
+        const finalUrl = url.includes('#') ? `${url}&tx=${txHash}` : `${url}#tx=${txHash}`;
+
         const { data: dbData, error: dbError } = await supabase
             .from('campaigns')
             .insert([
                 {
                     advertiser_wallet: advertiser,
                     creative_title: headline,
-                    creative_url: url,
+                    creative_url: finalUrl,
                     image_url: uploadedImageUrl,
                     ad_type: size,
                     ad_position: 'top', // Default

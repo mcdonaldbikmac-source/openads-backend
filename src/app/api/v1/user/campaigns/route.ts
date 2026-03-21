@@ -42,11 +42,25 @@ export async function GET(request: Request) {
             const finalImpressions = viewsCount || camp.impressions || 0;
             const finalClicks = clicksCount || 0;
 
+            let displayUrl = camp.creative_url || '';
+            let txHash = null;
+
+            if (displayUrl.includes('#tx=')) {
+                const parts = displayUrl.split('#tx=');
+                displayUrl = parts[0];
+                txHash = parts[1];
+            } else if (displayUrl.includes('&tx=')) {
+                const parts = displayUrl.split('&tx=');
+                displayUrl = parts[0];
+                txHash = parts[1];
+            }
+
             return {
                 id: camp.id,
                 headline: camp.creative_title,
                 image_url: camp.image_url,
-                url: camp.creative_url,
+                url: displayUrl,
+                tx_hash: txHash,
                 ad_type: camp.ad_type,
                 impressions: finalImpressions,
                 clicks: finalClicks,
