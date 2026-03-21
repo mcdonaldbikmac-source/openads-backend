@@ -160,9 +160,10 @@ export async function POST(request: Request) {
         }
 
         // Cryptographic Wallet Integrity Firewall
-        if (!publisherWallet || !publisherWallet.startsWith('0x') || publisherWallet.length !== 42) {
-            console.warn(`[Security] Blocked tracking ping with malformed wallet: ${publisherWallet}`);
-            return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 400 });
+        // Relaxed validation: Accept both Web3 hex wallets and scalar Legacy integer App IDs
+        if (!publisherWallet || publisherWallet.length < 3) {
+             console.error(`[Security] Invalid Publisher Wallet payload format: ${publisherWallet}`);
+             return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 400 });
         }
 
         // NULL_WEB_SIG to satisfy strict DB validations that expect a 132-char hex string 
