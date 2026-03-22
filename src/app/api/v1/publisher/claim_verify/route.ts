@@ -5,10 +5,12 @@ import { ethers } from 'ethers';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { txHash, wallet, claimType = 'ad' } = body;
+        const { txHash, wallet, payoutAddress, claimType = 'ad' } = body;
+        
+        const destinationAddress = payoutAddress || wallet;
 
-        if (!txHash || !wallet) {
-            return NextResponse.json({ error: 'Missing txHash or wallet parameter' }, { status: 400 });
+        if (!txHash || !wallet || !destinationAddress) {
+            return NextResponse.json({ error: 'Missing txHash, wallet, or payoutAddress parameter' }, { status: 400 });
         }
 
         // 1. Double-Spend / Replay Attack Protection
@@ -46,8 +48,8 @@ export async function POST(request: Request) {
                     // Verify the funds came directly out of the OpenAds Vault Smart Contract
                     const isFromVault = fromAddressPadded && fromAddressPadded.toLowerCase().endsWith(VAULT_ADDRESS.substring(2));
                     
-                    // Verify the funds went explicitly to the Publisher Wallet requesting the confirmation
-                    const isToPublisher = toAddressPadded && toAddressPadded.toLowerCase().endsWith(wallet.toLowerCase().substring(2));
+                    // Verify the funds went explicitly to the expected Payout Address
+                    const isToPublisher = toAddressPadded && toAddressPadded.toLowerCase().endsWith(destinationAddress.toLowerCase().substring(2));
 
                     if (isFromVault && isToPublisher) {
                         amountWeiFromBlockchain = BigInt(log.data);

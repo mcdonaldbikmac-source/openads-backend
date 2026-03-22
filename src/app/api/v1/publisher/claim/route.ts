@@ -13,10 +13,17 @@ const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { wallet, signature: clientSignature, claimType = 'ad' } = body;
+        /* 
+         * wallet: The immortal Database Identifier (e.g. FID '1550542' or '0x...')
+         * payoutAddress: The EVM 0x Address where the Smart Contract will deposit the USDC
+         */
+        const { wallet, signature: clientSignature, claimType = 'ad', payoutAddress } = body;
 
-        if (!wallet || !clientSignature) {
-            return NextResponse.json({ error: 'Missing wallet or signature parameter' }, { status: 400 });
+        // Fallback to strictly matching the wallet if the explicit payoutAddress is not provided by older client models
+        const destinationAddress = payoutAddress || wallet;
+
+        if (!wallet || !clientSignature || !destinationAddress) {
+            return NextResponse.json({ error: 'Missing wallet, payoutAddress, or signature parameter' }, { status: 400 });
         }
 
         // 1. Authenticate with EIP-191 Signature (MetaMask) or SIWF (Farcaster)
@@ -38,11 +45,11 @@ export async function POST(request: Request) {
             }
         } else {
             try {
-                const expectedMessage = `Sign to authorize withdrawal for ${wallet}`;
+                const expectedMessage = `Sign to authorize withdrawal for ${destinationAddress}`;
                 let recoveredAddress;
                 // STRICT SECURITY: Forcibly enforce the `expectedMessage` to permanently block Cross-Endpoint Signature Replay attacks.
                 recoveredAddress = ethers.verifyMessage(expectedMessage, clientSignature);
-                if (recoveredAddress.toLowerCase() !== wallet.toLowerCase()) {
+                if (recoveredAddress.toLowerCase() !== destinationAddress.toLowerCase()) {
                     throw new Error("Signature mismatch");
                 }
             } catch (authErr) {
@@ -119,7 +126,7 @@ export async function POST(request: Request) {
         
         const payloadHash = ethers.solidityPackedKeccak256(
             ['address', 'address', 'uint256'],
-            [wallet, USDC_ADDRESS, newPaidOut]
+            [destinationAddress, USDC_ADDRESS, newPaidOut]
         );
         
         // Sign the hash (note: this might need adjust based on exact EIP-712 setup, but EIP-191 bytes32 string signing is standard fallback)
