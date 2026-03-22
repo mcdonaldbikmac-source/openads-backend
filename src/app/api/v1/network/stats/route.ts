@@ -8,7 +8,7 @@ export async function GET() {
         // Query the live campaigns table to extract aggregate network intelligence
         const { data, error } = await supabase
             .from('campaigns')
-            .select('ad_type, impressions, spend_usd')
+            .select('ad_type, impressions, spend_wei')
             .eq('status', 'active');
 
         if (error) throw error;
@@ -32,7 +32,7 @@ export async function GET() {
                 if (!aggregates[type]) aggregates[type] = { views: 0, spend: 0 };
                 
                 aggregates[type].views += Number(camp.impressions) || 0;
-                aggregates[type].spend += Number(camp.spend_usd) || 0;
+                aggregates[type].spend += (Number(camp.spend_wei) || 0) / 1e6;
                 totalImpressions += Number(camp.impressions) || 0;
             });
 
