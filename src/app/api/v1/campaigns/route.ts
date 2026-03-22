@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
 
+export const revalidate = 60;
+
 export async function GET() {
     try {
         // Fetch ALL campaigns for network stats and admin dashboard
