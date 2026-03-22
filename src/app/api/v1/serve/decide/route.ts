@@ -3,6 +3,11 @@ import { supabase } from '@/app/lib/supabase';
 import crypto from 'crypto';
 import { ethers } from 'ethers';
 
+// High-Concurrency Node.js Vercel Memory Cache
+let globalCachedCampaigns: any[] | null = null;
+let lastCampaignCacheTime = 0;
+const globalImageMap = new Map<number, { url: string, timestamp: number }>();
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
@@ -84,17 +89,25 @@ export async function GET(request: Request) {
             }
         }
 
-        // 1. Query Supabase for eligible campaigns
+        // 1. Query Supabase for eligible campaigns (Memoized in Node.js RAM for 15s)
         // Must be active and have scheduled_start <= now (or null)
         // CRITICAL: We DO NOT select 'image_url' here to avoid memory bloat from thousands of Base64 strings.
-        const { data: campaigns, error } = await supabase
-            .from('campaigns')
-            .select('id, status, ad_type, scheduled_start, budget_wei, spend_wei, cpm_rate_wei, creative_title, creative_url')
-            .eq('status', 'active');
+        const nowTs = Date.now();
+        let campaigns = globalCachedCampaigns;
+        
+        if (!campaigns || nowTs - lastCampaignCacheTime > 15000) {
+            const { data: dbCampaigns, error } = await supabase
+                .from('campaigns')
+                .select('id, status, ad_type, scheduled_start, budget_wei, spend_wei, cpm_rate_wei, creative_title, creative_url')
+                .eq('status', 'active');
 
-        if (error) {
-            console.error('Supabase Query Error:', error);
-            return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
+            if (error) {
+                console.error('Supabase Query Error:', error);
+                return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
+            }
+            campaigns = dbCampaigns || [];
+            globalCachedCampaigns = campaigns;
+            lastCampaignCacheTime = nowTs;
         }
 
         if (!campaigns || campaigns.length === 0) {
@@ -215,15 +228,30 @@ export async function GET(request: Request) {
             await redis.expire(`served_ads_ip_${clientIp}`, 3600); // Reset fatigue every hour
         } catch (e) {}
 
-        // 4. Fetch the heavy Base64 image ONLY for the winning campaign
-        const { data: imageRow, error: imageError } = await supabase
-            .from('campaigns')
-            .select('image_url')
-            .eq('id', selectedCampaign.id)
-            .single();
+        // 4. Fetch the heavy Base64 image ONLY for the winning campaign (Cached for 15s)
+        let imageRowData = null;
+        let imageErrorObj = null;
 
-        if (imageError || !imageRow) {
-            console.error('Failed to fetch image for winning campaign:', imageError);
+        const cachedImage = globalImageMap.get(selectedCampaign.id);
+        if (cachedImage && nowTs - cachedImage.timestamp < 15000) {
+            imageRowData = { image_url: cachedImage.url };
+        } else {
+            const { data: imageRow, error: imageError } = await supabase
+                .from('campaigns')
+                .select('image_url')
+                .eq('id', selectedCampaign.id)
+                .single();
+
+            imageErrorObj = imageError;
+            imageRowData = imageRow;
+
+            if (imageRow && !imageError) {
+                globalImageMap.set(selectedCampaign.id, { url: imageRow.image_url, timestamp: nowTs });
+            }
+        }
+
+        if (imageErrorObj || !imageRowData) {
+            console.error('Failed to fetch image for winning campaign:', imageErrorObj);
             return NextResponse.json({ error: 'Failed to fetch ad creative' }, { status: 500 });
         }
 
@@ -243,7 +271,7 @@ export async function GET(request: Request) {
         // The frontend Advertiser Dashboard uploads a JSON string mapping sizes to URLs.
         // We must parse it and extract the correct image for the requested placement.
         // =========================================================================
-        let finalImageUrl = imageRow.image_url;
+        let finalImageUrl = imageRowData.image_url;
         // If responsive or multiple sizes allowed, randomly or systematically pick one
         let selectedSize = selectedCampaign.ad_type.split(',')[0].trim();
         
