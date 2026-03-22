@@ -57,7 +57,7 @@ export async function GET() {
         );
     } catch (err: any) {
         console.error('Network Stats Fetch Error:', err);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+        return NextResponse.json({ error: 'Internal Server Error', trace: err.message || err.toString() }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 }
 
