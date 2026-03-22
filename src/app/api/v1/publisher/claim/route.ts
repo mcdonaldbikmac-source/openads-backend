@@ -13,7 +13,7 @@ const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { wallet, signature: clientSignature } = body;
+        const { wallet, signature: clientSignature, claimType = 'ad' } = body;
 
         if (!wallet || !clientSignature) {
             return NextResponse.json({ error: 'Missing wallet or signature parameter' }, { status: 400 });
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         // 2. Fetch current publisher stats
         const { data: pubData, error: fetchErr } = await supabase
             .from('publishers')
-            .select('total_earned_wei, paid_out_wei')
+            .select('total_earned_wei, paid_out_wei, syndicate_earned_wei')
             .ilike('wallet', wallet)
             .single();
 
@@ -66,17 +66,49 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Publisher not found' }, { status: 404 });
         }
 
-        // 3. Mark DB as claimed (Pending Confirmation)
-        const newPaidOut = pubData.total_earned_wei || '0';
-        const currentPaidOut = pubData.paid_out_wei || '0';
-        
-        // Calculate cryptographic delta to prevent DB locking race conditions
-        const pending = BigInt(newPaidOut) - BigInt(currentPaidOut);
+        // 3. Reconstruct disjoint accounting using Vouchers as proxy ledger
+        const { data: syndPayouts } = await supabase
+            .from('vouchers')
+            .select('amount_usd')
+            .ilike('used_by_wallet', wallet)
+            .eq('campaign_id', 'SYNDICATE')
+            .eq('status', 'consumed');
 
-        if (pending <= BigInt(0)) {
-            return NextResponse.json({ error: 'No pending earnings to claim.' }, { status: 400 });
+        let syndicatePaidOutWei = BigInt(0);
+        if (syndPayouts) {
+            for (let v of syndPayouts) {
+                syndicatePaidOutWei += BigInt(Math.round(v.amount_usd * 1000000));
+            }
+        }
+
+        const totalEarnedStr = String(pubData.total_earned_wei || '0').split('.')[0];
+        const syndEarnedStr = String(pubData.syndicate_earned_wei || '0').split('.')[0];
+        const paidOutStr = String(pubData.paid_out_wei || '0').split('.')[0];
+
+        const totalEarnedWei = BigInt(totalEarnedStr);
+        const syndicateEarnedWei = BigInt(syndEarnedStr);
+        const totalPaidOutWei = BigInt(paidOutStr);
+
+        const adEarnedWei = totalEarnedWei - syndicateEarnedWei;
+        const adPaidOutWei = totalPaidOutWei - syndicatePaidOutWei;
+
+        const pendingAdWei = adEarnedWei - adPaidOutWei;
+        const pendingSyndWei = syndicateEarnedWei - syndicatePaidOutWei;
+
+        let pendingToClaim = BigInt(0);
+        if (claimType === 'syndicate') {
+            pendingToClaim = pendingSyndWei;
+        } else {
+            pendingToClaim = pendingAdWei;
+        }
+
+        if (pendingToClaim <= BigInt(0)) {
+            return NextResponse.json({ error: 'No pending earnings to claim for this specific channel.' }, { status: 400 });
         }
         
+        // Only increment the Smart Contract state exactly by the selected disjoint tranche
+        const newPaidOut = (totalPaidOutWei + pendingToClaim).toString();
+
         // SECURITY NOTE: The database `paid_out_wei` lock has been removed from this stage.
         // It will be exclusively updated post-transaction by reading the on-chain RPC logs, 
         // completely neutralizing the UX failure loop where failed transactions freeze pending balances.

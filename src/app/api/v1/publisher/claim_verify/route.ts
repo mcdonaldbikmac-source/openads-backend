@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { txHash, wallet } = body;
+        const { txHash, wallet, claimType = 'ad' } = body;
 
         if (!txHash || !wallet) {
             return NextResponse.json({ error: 'Missing txHash or wallet parameter' }, { status: 400 });
@@ -65,8 +65,13 @@ export async function POST(request: Request) {
         }
 
         // 3. Atomically lock the txHash as CONSUMED in the ledger (Atomic Protection)
+        let trackingCampaignId = null;
+        if (claimType === 'syndicate') {
+            trackingCampaignId = 'SYNDICATE';
+        }
+
         const { error: insertError } = await supabase.from('vouchers').insert([
-            { code: txHash, status: 'consumed', amount_usd: Number(ethers.formatUnits(amountWeiFromBlockchain.toString(), 6)), used_by_wallet: wallet, campaign_id: null }
+            { code: txHash, status: 'consumed', amount_usd: Number(ethers.formatUnits(amountWeiFromBlockchain.toString(), 6)), used_by_wallet: wallet, campaign_id: trackingCampaignId }
         ]);
         
         if (insertError) {

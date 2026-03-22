@@ -81,13 +81,33 @@ export async function GET(request: Request) {
             .eq('event_type', 'view')
             .gte('created_at', yesterday.toISOString());
 
-        const pendingWei = totalEarnedWei - paidOutWei;
+        // 4. Calculate distinct ledger tracks (Ad Revenue vs Syndicate Revenue) using the Vouchers Table as a proxy ledger
+        const { data: syndPayouts } = await supabase
+            .from('vouchers')
+            .select('amount_usd')
+            .eq('used_by_wallet', wallet)
+            .eq('campaign_id', 'SYNDICATE')
+            .eq('status', 'consumed');
+
+        let syndicatePaidOutWei = BigInt(0);
+        if (syndPayouts) {
+            for (let v of syndPayouts) {
+                // Convert USD float back to strict Wei
+                syndicatePaidOutWei += BigInt(Math.round(v.amount_usd * 1000000));
+            }
+        }
+
+        const adEarnedWei = totalEarnedWei - syndicateEarnedWei;
+        const adPaidOutWei = paidOutWei - syndicatePaidOutWei;
+
+        const pendingAdWei = adEarnedWei - adPaidOutWei;
+        const pendingSyndWei = syndicateEarnedWei - syndicatePaidOutWei;
 
         // Mathematically derive Today's fraction strictly based on aggregate Lifetime ECPM performance
         // Prevents the requirement of a catastrophic DB Schema migration while fulfilling the 'Today vs Lifetime' separation directive
         let todayEarnedWei = BigInt(0);
         if (viewCount && viewCount > 0) {
-            const weiPerView = totalEarnedWei / BigInt(viewCount);
+            const weiPerView = adEarnedWei / BigInt(viewCount);
             todayEarnedWei = weiPerView * BigInt(todayViewCount || 0);
         }
 
@@ -98,9 +118,10 @@ export async function GET(request: Request) {
                 stats: {
                     todayEarnedUSD: Number(ethers.formatUnits(todayEarnedWei.toString(), 6)).toFixed(4),
                     totalEarnedUSD: Number(ethers.formatUnits(totalEarnedWei.toString(), 6)).toFixed(4),
-                    pendingUSD: Number(ethers.formatUnits(pendingWei.toString(), 6)).toFixed(4),
+                    pendingUSD: Number(ethers.formatUnits(pendingAdWei.toString(), 6)).toFixed(4), // Base Ad Revenue Claimable
+                    pendingSyndicateUSD: Number(ethers.formatUnits(pendingSyndWei.toString(), 6)).toFixed(4), // Syndicate Revenue Claimable
                     paidOutUSD: Number(ethers.formatUnits(paidOutWei.toString(), 6)).toFixed(4),
-                    syndicateEarnedUSD: Number(ethers.formatUnits(syndicateEarnedWei.toString(), 6)).toFixed(4),
+                    syndicateEarnedUSD: Number(ethers.formatUnits(syndicateEarnedWei.toString(), 6)).toFixed(4), // All Time Protocol Earnings
                     impressions: viewCount || 0,
                     todayImpressions: todayViewCount || 0,
                     clicks: clickCount || 0,
