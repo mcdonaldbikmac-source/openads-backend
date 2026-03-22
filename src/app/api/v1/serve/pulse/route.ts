@@ -312,7 +312,10 @@ export async function POST(request: Request) {
         // scrape its organic branding and unlock the Dashboard UI.
         // =========================================================================
         if (!publisherApp.logo_url || publisherApp.logo_url === 'verified') {
-            let extractedLogo = 'verified'; // Default to verified to block infinite scraping loops on empty sites
+            // CRITICAL OPTIMIZATION: Default to 'no_logo' to permanently terminate
+            // the scraping loop if the target site lacks a logo. If we defaulted to 'verified',
+            // every single impression would trigger a 4-second scrape, paralyzing the API.
+            let extractedLogo = 'no_logo'; 
             try {
                 let checkUrl = publisherApp.domain || requestHost;
                 if (!checkUrl.startsWith('http')) checkUrl = 'https://' + checkUrl;
