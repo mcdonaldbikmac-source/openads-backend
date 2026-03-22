@@ -14,7 +14,7 @@ function AdFrameContent() {
     const isPreview = searchParams.get('preview') === 'true';
 
     const [adData, setAdData] = useState<any>(null);
-    const [serveToken, setServeToken] = useState<string>('verified_origin');
+    const [serveToken, setServeToken] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [hasTrackedImpression, setHasTrackedImpression] = useState(false);
     
@@ -23,25 +23,6 @@ function AdFrameContent() {
     // Fetch the ad on mount
     useEffect(() => {
         if (!placementId) return;
-
-        // Unconditional telemetry ping to guarantee backend connection validation even if Ad Inventory is perfectly empty (Scenario B fix)
-        fetch('/api/v1/serve/pulse', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_type: clientType,
-                event: 'connect',
-                ad: { id: '00000000-0000-0000-0000-000000000000' }, // Dummy UUID, will be ignored by pulse route for 'connect' events
-                placement: placementId,
-                publisher: publisherWallet,
-                fid,
-                logo: searchParams.get('logo') || '',
-                sig: 'verified_origin',
-                message: `connect:${placementId}:${publisherWallet}`,
-                parent_url: document.referrer || window.location.href
-            }),
-            keepalive: true
-        }).catch(() => {});
 
         async function fetchAd() {
             try {
@@ -107,7 +88,7 @@ function AdFrameContent() {
                                     publisher: publisherWallet,
                                     fid,
                                     logo: searchParams.get('logo') || '',
-                                    sig: serveToken,
+                                    sig: serveToken || '',
                                     message: `impression:${placementId}:${publisherWallet}`,
                                     parent_url: document.referrer || window.location.href
                                 })
@@ -143,7 +124,7 @@ function AdFrameContent() {
                 placement: placementId,
                 publisher: publisherWallet,
                 fid,
-                sig: serveToken,
+                sig: serveToken || '',
                 message: `click:${adData.id}:${placementId}:${publisherWallet}`
             }),
             keepalive: true // Crucial for navigating away smoothly

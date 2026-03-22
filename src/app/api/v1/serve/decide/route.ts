@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         try { requestHost = new URL(originHeader).host; } catch(e) {}
         
         // Implicitly whitelist Vercel iframe architecture and local staging environments
-        if (['openads-backend.vercel.app', 'localhost:3000', '127.0.0.1:8080', 'localhost'].includes(requestHost)) {
+        if (process.env.NODE_ENV === 'development' || ['openads.xyz', 'openads-backend.vercel.app'].includes(requestHost)) {
             requestHost = ''; // Clear it to silently bypass the DB check
         }
         
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
         if (requestHost && publisherWallet && publisherWallet.toLowerCase().startsWith('0x')) {
             const { data: appData } = await supabase
                 .from('apps')
-                .select('app_type')
+                .select('id, app_type, logo_url')
                 .ilike('publisher_wallet', publisherWallet)
                 .ilike('domain', `%${requestHost}%`)
                 .single();
@@ -52,6 +52,18 @@ export async function GET(request: Request) {
             if (appData) {
                 const parts = appData.app_type.split('|');
                 const baseAppType = parts[0];
+
+                // =========================================================================
+                // SECURITY FIX: Synchronous Database Verification Lock
+                // We MUST synchronously write 'verified' to the database before returning the Ad payload.
+                // Serverless environments (Vercel) aggressively kill async promises upon API return.
+                // If we relied purely on async background scraping here, the subsequent telemetry /pulse (view/click)
+                // would hit the strict firewall before the DB committed, permanently locking the publisher in a False-Positive 'Unverified' state.
+                // The actual HD Logo Scraping is safely deferred to the awaited Telemetry /pulse handshake.
+                // =========================================================================
+                if (!appData.logo_url) {
+                    await supabase.from('apps').update({ logo_url: 'verified' }).eq('id', appData.id);
+                }
                 
                 if (parts.length > 1 && parts[1].startsWith('formats:')) {
                     allowedFormats = parts[1].replace('formats:', '').split(',');
@@ -64,11 +76,11 @@ export async function GET(request: Request) {
 
                 if (baseAppType.startsWith('paused_')) {
                     console.log(`[OpenAds] ⏸️ Blocked Ad Request: Domain ${requestHost} is paused by publisher.`);
-                    return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 200 });
+                    return NextResponse.json({ error: 'Ad serving is paused for this miniapp by the publisher.' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
                 }
             } else {
                 console.warn(`[Security] 🚫 Brand Safety Halt: Unregistered or Admin-Deleted publisher domain [${requestHost}] attempted to siphon inventory.`);
-                return NextResponse.json({ error: 'Domain unauthorized or explicitly deleted by Administrator.' }, { status: 202 });
+                return NextResponse.json({ error: 'Domain unauthorized or explicitly deleted by Administrator.' }, { status: 202, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
             }
         }
 
@@ -86,7 +98,7 @@ export async function GET(request: Request) {
         }
 
         if (!campaigns || campaigns.length === 0) {
-            return NextResponse.json({ error: 'No active campaigns available' }, { status: 200 });
+            return NextResponse.json({ error: 'No active campaigns available' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
         }
 
         // 1.5 Filter by explicit placement dimensions AND position to prevent Auction Hijacking
@@ -129,7 +141,7 @@ export async function GET(request: Request) {
         });
 
         if (filteredByPosition.length === 0) {
-            return NextResponse.json({ error: 'No active campaigns matching requested position' }, { status: 200 });
+            return NextResponse.json({ error: 'No active campaigns matching requested position' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
         }
 
         const now = new Date();
@@ -152,7 +164,7 @@ export async function GET(request: Request) {
         });
 
         if (eligibleCampaigns.length === 0) {
-            return NextResponse.json({ error: 'All campaigns exhausted' }, { status: 200 });
+            return NextResponse.json({ error: 'All campaigns exhausted' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
         }
 
         // =========================================================================
@@ -282,6 +294,7 @@ export async function GET(request: Request) {
                 headers: {
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                    'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
                 },
             }
         );

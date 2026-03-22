@@ -166,8 +166,7 @@ export async function POST(request: Request) {
              return NextResponse.json({ error: 'Invalid Publisher Wallet format.' }, { status: 202 });
         }
 
-        // NULL_WEB_SIG to satisfy strict DB validations that expect a 132-char hex string 
-        const NULL_WEB_SIG = '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+        
 
         // =========================================================================
         // SECURITY UPDATE: Strict Domain Authentication mapped to Publisher Wallet
@@ -261,7 +260,7 @@ export async function POST(request: Request) {
         // Record the Impression Securely via our Atomic RPC function
         if (normalizedEvent === 'view') {
             const safeFid = client_type === 'web' ? 0 : Number(fid);
-            const safeSig = (client_type === 'web' || sig === 'verified_origin') ? NULL_WEB_SIG : sig;
+            const safeSig = (client_type === 'web') ? null : sig;
 
             const { data, error } = await supabase.rpc('record_impression', {
                 p_campaign_id: ad.id,
@@ -279,7 +278,7 @@ export async function POST(request: Request) {
         else if (normalizedEvent === 'click') {
             // For production, clicks log for CTR computation
             const safeFid = client_type === 'web' ? 0 : Number(fid);
-            const safeSig = (client_type === 'web' || sig === 'verified_origin') ? NULL_WEB_SIG : sig;
+            const safeSig = (client_type === 'web') ? null : sig;
 
             const { error } = await supabase.from('tracking_events').insert([{
                 campaign_id: ad.id,
@@ -293,7 +292,7 @@ export async function POST(request: Request) {
         }
         else if (normalizedEvent === 'connect') {
             const safeFid = client_type === 'web' ? 0 : Number(fid);
-            const safeSig = (client_type === 'web' || sig === 'verified_origin') ? NULL_WEB_SIG : sig;
+            const safeSig = (client_type === 'web') ? null : sig;
 
             // Log a synthetic connection heartbeat for verification (No campaign_id)
             const { error } = await supabase.from('tracking_events').insert([{
