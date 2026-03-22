@@ -123,12 +123,26 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No pending earnings to claim for this specific channel.' }, { status: 400 });
         }
         
-        // Only increment the Smart Contract state exactly by the selected disjoint tranche
-        const newPaidOut = (totalPaidOutWei + pendingToClaim).toString();
+        // =========================================================================
+        // ZERO-DAY WALLET ROTATION MITIGATION (THE PROXY LEDGER BRIDGE)
+        // If a Farcaster user rotates their custody wallet, the new wallet has `0` claimed on the Smart Contract.
+        // If we simply send `totalPaidOutWei` from the DB, the Smart Contract will mistakenly double-pay the ENTIRE historical earnings of the FID!
+        // To immune the Vault against Wallet Rotation, we must construct the EIP-712 payload specifically anchored to THIS exact destination wallet's independent blockchain state.
+        // =========================================================================
+        const rpcProvider = new ethers.JsonRpcProvider("https://mainnet.base.org");
+        const vaultAbi = ["function claimedAmounts(address, address) view returns (uint256)"];
+        const VAULT_ADDRESS = '0xA16459A0282641CeA91B67459F0bAE2B5456B15F';
+        const vaultContract = new ethers.Contract(VAULT_ADDRESS, vaultAbi, rpcProvider);
+        
+        // Fetch exactly what THIS SPECIFIC WALLET has already claimed on-chain
+        const onChainClaimedWei = await vaultContract.claimedAmounts(destinationAddress, USDC_ADDRESS);
+        
+        // Mathematically isolate the payload to strictly authorize ONLY the pending amount, disregarding older wallets the FID may have used
+        const newPaidOut = (onChainClaimedWei + pendingToClaim).toString();
 
         // SECURITY NOTE: The database `paid_out_wei` lock has been removed from this stage.
-        // It will be exclusively updated post-transaction by reading the on-chain RPC logs, 
-        // completely neutralizing the UX failure loop where failed transactions freeze pending balances.
+        // It will be exclusively updated post-transaction by `claim_verify` reading the exact RPC Transfer logs, 
+        // cleanly integrating the fractured Smart Contract states into the unified Database Ledger.
 
         // 4. Generate the Server-Side ECDSA Signature for the Smart Contract
         // The OpenAdsVault expects a signature over: keccak256(abi.encodePacked(publisherWallet, token, amount))
