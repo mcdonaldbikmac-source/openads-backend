@@ -219,6 +219,32 @@ export async function GET(request: Request) {
         // The first element is now the highest bidder
         let selectedCampaign = eligibleCampaigns[0];
 
+        // =========================================================================
+        // SECURITY UPDATE: Atomic Redis Liquidity Deduction (Overspend Firewall)
+        // Deduct the impression cost INSTANTLY in Redis to prevent Web2 race conditions
+        // from overselling the campaign budget and draining the Smart Contract Vault.
+        // =========================================================================
+        try {
+            const { Redis } = require('@upstash/redis');
+            const redis = Redis.fromEnv();
+            const impressionCostWei = Number((BigInt(selectedCampaign.cpm_rate_wei || 0) / BigInt(1000)).toString());
+            
+            // Atomically increment the real-time spend ledger
+            const realtimeSpend = await redis.incrby(`rt_spend_${selectedCampaign.id}`, impressionCostWei);
+            const totalBudget = Number(selectedCampaign.budget_wei || 0);
+            const postgresSpend = Number(selectedCampaign.spend_wei || 0);
+            
+            // If historical spend + real-time spend exceeds budget, block the ad!
+            if (postgresSpend + realtimeSpend > totalBudget) {
+                console.warn(`[Security] Campaign ${selectedCampaign.id} exhausted Atomic Redis Budget. Dropping.`);
+                // Return the exhausted ledger back since we didn't serve it
+                await redis.decrby(`rt_spend_${selectedCampaign.id}`, impressionCostWei);
+                return NextResponse.json({ error: 'All campaigns exhausted (Real-time cap)' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
+            }
+        } catch (e) {
+            console.warn(`[Security] Redis atomic budget deduction skipped due to disconnect. Relying on Cached Postgres limits.`, e);
+        }
+
         // Log the decision into the Fatigue Manager
         try {
             const { Redis } = require('@upstash/redis');
