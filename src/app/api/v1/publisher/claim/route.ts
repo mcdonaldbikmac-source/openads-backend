@@ -42,7 +42,7 @@ export async function POST(request: Request) {
                 }
 
                 // SECURITY HARDENING: Recover the exact Ethereum Custody Address used to sign the native SIWF token
-                const recoveredCustodyAddress = ethers.verifyMessage(message, clientSignature);
+                const recoveredCustodyAddress = ethers.verifyMessage(body.message, clientSignature);
                 
                 // CRITICAL VULNERABILITY PATCH: We MUST forcefully constrain the requested payout destination to the physical SIWF Signer to prevent XSS Parameter Forging (Hackers stealing the token to redirect funds)
                 if (recoveredCustodyAddress.toLowerCase() !== destinationAddress.toLowerCase()) {

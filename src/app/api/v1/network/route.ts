@@ -8,8 +8,11 @@ export async function GET() {
         const { data, error } = await supabase
             .from('apps')
             .select('name, domain, app_type, logo_url')
+            .not('logo_url', 'is', null)
+            .neq('app_type', 'banned')
+            .not('app_type', 'ilike', 'paused_%')
             .order('created_at', { ascending: false })
-            .limit(10); // Limit to top 10 recent apps for the marquee
+            .limit(10); // Limit to top 10 verified/active apps for the marquee
 
         if (error) throw error;
 

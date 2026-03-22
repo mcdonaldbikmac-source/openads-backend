@@ -1,7 +1,9 @@
-import { supabase } from './src/app/lib/supabase.js';
-
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config({path: '.env.local'});
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 async function run() {
-    const { data } = await supabase.from('campaigns').select('id, name, status, ad_url, ad_size');
-    console.log(JSON.stringify(data, null, 2));
+  const { data, error } = await supabase.from('apps').select('*').limit(1);
+  console.log(data, error);
 }
 run();
