@@ -40,6 +40,16 @@ export async function POST(request: Request) {
                 if (!result.success || result.fid.toString() !== wallet) {
                     return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
                 }
+
+                // SECURITY HARDENING: Recover the exact Ethereum Custody Address used to sign the native SIWF token
+                const recoveredCustodyAddress = ethers.verifyMessage(message, clientSignature);
+                
+                // CRITICAL VULNERABILITY PATCH: We MUST forcefully constrain the requested payout destination to the physical SIWF Signer to prevent XSS Parameter Forging (Hackers stealing the token to redirect funds)
+                if (recoveredCustodyAddress.toLowerCase() !== destinationAddress.toLowerCase()) {
+                    console.error(`[Security Critical] SIWF Parameter Forging Attack Blocked! Attempted redirect to ${destinationAddress} from SIWF owner ${recoveredCustodyAddress}`);
+                    return NextResponse.json({ error: 'Payout Address spoofing detected. The requested payout destination does not mathematically match the intrinsic SIWF authorization signature.' }, { status: 403 });
+                }
+
             } catch (err) {
                 return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
             }
