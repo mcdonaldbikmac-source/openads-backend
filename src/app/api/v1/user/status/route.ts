@@ -60,7 +60,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
         }
 
-        if (campaignAuth.advertiser_wallet.toLowerCase() !== signer_wallet.toLowerCase()) {
+        const authWallet = campaignAuth.advertiser_wallet.toLowerCase();
+        const signerLower = signer_wallet.toLowerCase();
+
+        // Security: Support legacy standalone string AND dual-identity pipe formats (`|0x...|Hunt16z|`)
+        // The pipe wrappers `|signerLower|` completely eliminate partial-match IDOR vulnerabilities.
+        if (authWallet !== signerLower && !authWallet.includes(`|${signerLower}|`)) {
             console.warn(`[Security] IDOR attempt blocked! Wallet ${signer_wallet} tried to toggle campaign owned by ${campaignAuth.advertiser_wallet}`);
             return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }

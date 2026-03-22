@@ -110,7 +110,12 @@ export async function POST(request: Request) {
         }
 
         // 4. Authorize that the signer actually owns this campaign before inflating budget
-        if (campaign.advertiser_wallet.toLowerCase() !== signer_wallet.toLowerCase()) {
+        const authWallet = campaign.advertiser_wallet.toLowerCase();
+        const signerLower = signer_wallet.toLowerCase();
+
+        // Security: Support legacy standalone string AND dual-identity pipe formats (`|0x...|Hunt16z|`)
+        // The pipe wrappers `|signerLower|` completely eliminate partial-match IDOR vulnerabilities.
+        if (authWallet !== signerLower && !authWallet.includes(`|${signerLower}|`)) {
             console.warn(`[Security] Wallet ${signer_wallet} tried to inflate budget for campaign owned by ${campaign.advertiser_wallet}`);
             return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }

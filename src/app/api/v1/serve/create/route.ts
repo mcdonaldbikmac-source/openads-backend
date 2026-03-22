@@ -214,11 +214,21 @@ export async function POST(request: Request) {
         // Serialize the txHash into the creative_url hash fragment to persist it without schema migrations
         const finalUrl = url.includes('#') ? `${url}&tx=${txHash}` : `${url}#tx=${txHash}`;
 
+        // ==========================================
+        // DUAL-IDENTITY MAPPING (ZERO MIGRATION)
+        // Bind the Web3 Wallet and the Farcaster FID natively into a perfectly bounded matrix
+        // ==========================================
+        const { fid } = body;
+        let definitiveOwner = advertiser;
+        if (fid) {
+            definitiveOwner = `|${advertiser}|${fid}|`; // e.g. "|0xABC...|Hunt16z|"
+        }
+
         const { data: dbData, error: dbError } = await supabase
             .from('campaigns')
             .insert([
                 {
-                    advertiser_wallet: advertiser,
+                    advertiser_wallet: definitiveOwner,
                     creative_title: headline,
                     creative_url: finalUrl,
                     image_url: uploadedImageUrl,

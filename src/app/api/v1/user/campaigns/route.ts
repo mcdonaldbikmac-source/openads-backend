@@ -76,11 +76,12 @@ export async function GET(request: Request) {
         // ==========================================
 
         // Fetch user's campaigns
-        // CRITICAL FIX: Use .ilike() for case-insensitive matching because EIP-55 Web3 Wallet checksums may be passed lowercased
+        // 1. Support legacy standalone Web3 wallet strings.
+        // 2. Support new Zero-Migration Dual-Identity strings `|0xABC|Hunt16z|` securely using bounded wildcards.
         const { data: campaigns, error } = await supabase
             .from('campaigns')
             .select('*')
-            .ilike('advertiser_wallet', wallet)
+            .or(`advertiser_wallet.ilike.${wallet},advertiser_wallet.ilike.%|${wallet}|%`)
             .order('created_at', { ascending: false });
 
         if (error) {
