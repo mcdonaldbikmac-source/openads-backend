@@ -24,7 +24,13 @@ export class CampaignRepository {
             .from('campaigns')
             .select('*')
             .or(orQueryParts.join(','))
-            .eq('is_test', false)
+            .is('is_test', false) // Use Postgres `IS FALSE` (or strictly match missing) 
+            // Wait, Supabase `.is('is_test', false)` actually tests `is_test IS FALSE`.
+            // But if it is null, IS FALSE is false. We must use `or('is_test.eq.false,is_test.is.null')`
+            // Since we already have an `.or()`, we can chain another `.or()` if Supabase allows, 
+            // BUT Supabase overrides chained `.or()`s depending on the client version.
+            // Safer to use `.not('is_test', 'eq', true)` natively.
+            .not('is_test', 'eq', true)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
