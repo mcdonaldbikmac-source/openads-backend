@@ -113,6 +113,19 @@ export async function POST(request: Request) {
                     return NextResponse.json({ error: 'Web3 Transaction failed or not found on Base mainnet.' }, { status: 400 });
                 }
                 
+                // BUSINESS LOGIC ENFORCEMENT: 24-Hour Expiration
+                const block = await provider.getBlock(receipt.blockNumber);
+                if (!block) {
+                    return NextResponse.json({ error: 'Failed to retrieve Ethereum block confirmation.' }, { status: 500 });
+                }
+                
+                const txTimeMs = Number(block.timestamp) * 1000;
+                const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+                if (Date.now() - txTimeMs > twentyFourHoursMs) {
+                    console.warn(`[Security] Blocked expired deposit txHash: ${txHash}. Age: ${(Date.now() - txTimeMs) / 3600000} hours.`);
+                    return NextResponse.json({ error: 'Transaction Expired. Campaigns must be created within 24 hours of Vault deposit.' }, { status: 400 });
+                }
+                
                 // CRITICAL SECURITY UPGRADE: ERC-4337 Smart Wallet Compatibility
                 // We cannot use `receipt.from === signer_wallet` because Coinbase Smart Wallets execute 
                 // via Bundler EOAs. Instead, we authenticate the funds natively inside the ERC20 log sequence.
