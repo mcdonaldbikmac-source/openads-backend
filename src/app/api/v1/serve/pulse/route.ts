@@ -288,6 +288,13 @@ export async function POST(request: Request) {
                 // Map the Ad ID to the precise Publisher Wallet for the Cron flush mapping
                 const matrixKey = `${ad.id}::${publisherApp.publisher_wallet}`;
                 await redis.hincrby('cron_pending_views', matrixKey, 1);
+                
+                // =========================================================================
+                // FEATURE: High-Fidelity Publisher Dashboard Precision
+                // Record the absolute epoch millisecond of the impression so Dashboards do not 
+                // experience clock-jumping/mock-dates during Vercel's 24-hour Cron blackout.
+                // =========================================================================
+                await redis.set(`pub_last_active_${publisherApp.publisher_wallet}`, Date.now(), { ex: 86400 });
             } catch (redisErr) {
                 // If Redis fundamentally crashes during the request, fallback to synchronous DB tracking instantly
                 // to absolutely guarantee 0% data loss.

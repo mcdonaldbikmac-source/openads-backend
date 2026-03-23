@@ -102,14 +102,14 @@ export async function GET(request: Request) {
         try {
             const { Redis } = require('@upstash/redis');
             const redisClient = Redis.fromEnv();
-            const pendingViews = await redisClient.hgetall('cron_pending_views');
-            if (pendingViews) {
-                for (const key of Object.keys(pendingViews)) {
-                    const pubWallet = key.split('::')[1];
-                    if (pubWallet && pubWallet.toLowerCase() === wallet.toLowerCase()) {
-                        lastActiveAt = new Date().toISOString();
-                        break;
-                    }
+            const realLastActive = await redisClient.get(`pub_last_active_${wallet}`);
+            if (realLastActive) {
+                const redisTime = Number(realLastActive);
+                const pgTime = lastActiveAt ? new Date(lastActiveAt).getTime() : 0;
+                
+                // Prioritize whichever timestamp is most recent (Redis or Postgres DB)
+                if (redisTime > pgTime) {
+                    lastActiveAt = new Date(redisTime).toISOString();
                 }
             }
         } catch(e) {}

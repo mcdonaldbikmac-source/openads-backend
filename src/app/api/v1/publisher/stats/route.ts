@@ -157,6 +157,14 @@ export async function GET(request: Request) {
         try {
             const { Redis } = require('@upstash/redis');
             const redisClient = Redis.fromEnv();
+            
+            // 1. Fetch exact high-fidelity timestamp directly mapped from telemetry
+            const realLastActive = await redisClient.get(`pub_last_active_${wallet}`);
+            if (realLastActive) {
+                redisLastActiveAt = new Date(Number(realLastActive)).toISOString();
+            }
+
+            // 2. Compute volatile metrics aggregation for Real-Time USD earnings
             const pendingViews = await redisClient.hgetall('cron_pending_views');
             
             if (pendingViews) {
@@ -166,7 +174,6 @@ export async function GET(request: Request) {
                     if (pubWallet.toLowerCase() === wallet.toLowerCase()) {
                         redisRealtimeViews += Number(val as string);
                         recentAdIds.push(adId);
-                        redisLastActiveAt = new Date().toISOString();
                     }
                 }
                 
