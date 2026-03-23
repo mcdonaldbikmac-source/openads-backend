@@ -13,14 +13,14 @@ const MAX_REQUESTS = 500;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-OpenAds-Auth, Cache-Control, Pragma, Expires',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-OpenAds-Auth, Cache-Control, Pragma, Expires, Accept, X-Requested-With',
 };
 
 export function middleware(request: NextRequest) {
-  // Handle Preflight OPTIONS requests universally
+  // Handle Preflight OPTIONS requests universally without breaking HTTP 204 spec
   if (request.method === 'OPTIONS') {
-    return NextResponse.json({}, { status: 204, headers: corsHeaders });
+    return new NextResponse(null, { status: 204, headers: corsHeaders });
   }
 
   // Ensure we only rate-limit the actual API endpoints
