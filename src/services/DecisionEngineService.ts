@@ -58,8 +58,8 @@ export class DecisionEngineService {
     /**
      * Main Ad Selection and Decision Layer
      */
-    static async resolveAd(placementId: string, position: string, requestHost: string, clientIp: string) {
-        let publisherWallet = placementId.split('-')[1]; // Ex: top-0xabc...
+    static async resolveAd(placementId: string, publisherWalletParam: string, position: string, requestHost: string, clientIp: string) {
+        let publisherWallet = publisherWalletParam || (placementId && placementId.includes('-') ? placementId.split('-')[1] : placementId);
         const requestedFormat = (placementId && placementId.includes('-')) ? placementId.split('-')[0] : 'responsive';
 
         // 1. Domain Verification

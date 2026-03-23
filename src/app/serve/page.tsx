@@ -28,7 +28,8 @@ function AdFrameContent() {
             try {
                 const parentUrl = document.referrer || '';
                 const encodedParent = encodeURIComponent(parentUrl);
-                const res = await fetch(`/api/v1/serve/decide?placement=${placementId}&position=${position}&parent_url=${encodedParent}&t=${Date.now()}`);
+                const publisherParam = publisherWallet ? `&publisher=${publisherWallet}` : '';
+                const res = await fetch(`/api/v1/serve/decide?placement=${placementId}${publisherParam}&position=${position}&parent_url=${encodedParent}&t=${Date.now()}`);
                 if (!res.ok) throw new Error('API unreachable');
                 const data = await res.json();
                 

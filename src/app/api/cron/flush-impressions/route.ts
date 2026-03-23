@@ -54,14 +54,15 @@ export async function GET(request: Request) {
             let successfulViews = 0;
 
             for (let i = 0; i < views; i++) {
-                // Execute sequentially to limit maximum DB connections to 1
-                const { error } = await supabase.rpc('record_impression', {
-                    p_campaign_id: adId,
-                    p_publisher_wallet: publisherWallet,
-                    p_fid: 0,
-                    p_event_type: 'view',
-                    p_sig: null
-                });
+                // Use standard JS insert instead of relying on a potentially missing DB RPC
+                const { error } = await supabase.from('tracking_events').insert([{
+                    campaign_id: Number(adId),
+                    publisher_wallet: publisherWallet,
+                    fid: 0,
+                    event_type: 'view',
+                    sig: null,
+                    is_test: false
+                }]);
                 
                 if (!error) {
                     totalFlushed++;

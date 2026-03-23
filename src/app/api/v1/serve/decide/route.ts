@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const placementId = searchParams.get('placement');
+        const publisherWalletParam = searchParams.get('publisher') || '';
         const position = (searchParams.get('position') || 'all').toLowerCase();
         
         const clientReportedParent = searchParams.get('parent_url');
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
         }
 
         // Orchestrate all logic through the Business Layer
-        const resolution = await DecisionEngineService.resolveAd(placementId, position, requestHost, clientIp);
+        const resolution = await DecisionEngineService.resolveAd(placementId, publisherWalletParam, position, requestHost, clientIp);
 
         // Standardize the API return
         if (resolution.errorPayload) {
