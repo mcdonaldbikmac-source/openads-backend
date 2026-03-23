@@ -10,6 +10,7 @@ export async function GET() {
         const { data: campaigns, error } = await supabase
             .from('campaigns')
             .select('*')
+            .eq('is_test', false)
             .order('created_at', { ascending: false });
 
         if (error) {
