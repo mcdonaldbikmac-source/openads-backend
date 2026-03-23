@@ -12,37 +12,33 @@ export class DecisionEngineService {
     /**
      * Resolves an incoming publisher request against Sandbox routing rules and Admin blacklists.
      */
-    static async validatePublisherDomain(requestHost: string, publisherWallet: string) {
-        if (!publisherWallet) return { isAuthorized: false };
-        
-        // 1. Naturally permit OpenAds infrastructure and local dev environments for previews
-        if (requestHost && (['openads.xyz', 'openads-backend.vercel.app', 'localhost'].includes(requestHost) || requestHost.includes('127.0.0.1'))) {
-            return { isAuthorized: true };
-        }
+    static async validatePublisherDomain(requestHost: string, identityToken: string) {
+        if (!requestHost) return { isAuthorized: true };
+        if (requestHost === 'localhost' || requestHost === '127.0.0.1' || requestHost.includes('ngrok.io')) return { isAuthorized: true, isLocal: true };
+        if (requestHost.includes('vercel.app') && requestHost.includes('openads')) return { isAuthorized: true, isLocal: true };
+        if (requestHost === 'openads.xyz' || requestHost === 'www.openads.xyz') return { isAuthorized: true, isLocal: true };
 
-        // 2. All external traffic MUST provide a valid domain to query DB
-        if (!requestHost) return { isAuthorized: false };
-
-        // 3. Prevent Hijacking & DoS: Bind domain wildcard queries EXCLUSIVELY to the claiming publisher's wallet
-        const { data: appDataList } = await supabase
+        // DYNAMICAL IDENTITY ROUTING: Support both Legacy Wallet binding and Modern App_ID binding
+        let query = supabase
             .from('apps')
             .select('id, app_type, logo_url, publisher_wallet')
-            .ilike('publisher_wallet', publisherWallet)
-            .ilike('domain', `%${requestHost}%`)
             .limit(1);
 
+        if (identityToken.toLowerCase().startsWith('0x')) {
+            query = query.ilike('publisher_wallet', identityToken);
+        } else {
+            // It's an App ID (UUID)
+            query = query.eq('id', identityToken);
+        }
+
+        query = query.ilike('domain', `%${requestHost}%`);
+        
+        const { data: appDataList } = await query;
+
         if (!appDataList || appDataList.length === 0) {
+            console.warn(`[Security] 403 Forbidden: Identity Token '${identityToken}' does not own domain '${requestHost}'. DoS blocked.`);
             return { isAuthorized: false, error: 'Domain unauthorized for this Publisher identity.', status: 403 };
         }
-        
-        const appData = appDataList[0];
-
-        const parts = appData.app_type.split('|');
-        const baseAppType = parts[0];
-
-        // Synchronous Verify Lock
-        if (!appData.logo_url) {
-            await supabase.from('apps').update({ logo_url: 'verified' }).eq('id', appData.id);
         }
         
         let allowedFormats = parts.length > 1 && parts[1].startsWith('formats:') 
