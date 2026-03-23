@@ -39,6 +39,14 @@ export class DecisionEngineService {
             console.warn(`[Security] 403 Forbidden: Identity Token '${identityToken}' does not own domain '${requestHost}'. DoS blocked.`);
             return { isAuthorized: false, error: 'Domain unauthorized for this Publisher identity.', status: 403 };
         }
+
+        const appData = appDataList[0];
+        const parts = appData.app_type.split('|');
+        const baseAppType = parts[0];
+        
+        // Synchronous Verify Lock
+        if (!appData.logo_url) {
+            await supabase.from('apps').update({ logo_url: 'verified' }).eq('id', appData.id);
         }
         
         let allowedFormats = parts.length > 1 && parts[1].startsWith('formats:') 
