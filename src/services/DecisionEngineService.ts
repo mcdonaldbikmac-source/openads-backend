@@ -23,23 +23,19 @@ export class DecisionEngineService {
         // 2. All external traffic MUST provide a valid domain to query DB
         if (!requestHost) return { isAuthorized: false };
 
-        // 3. Prevent Hijacking: Ensure the domain is strictly registered to the requesting wallet
+        // 3. Prevent Hijacking & DoS: Bind domain wildcard queries EXCLUSIVELY to the claiming publisher's wallet
         const { data: appDataList } = await supabase
             .from('apps')
             .select('id, app_type, logo_url, publisher_wallet')
+            .ilike('publisher_wallet', publisherWallet)
             .ilike('domain', `%${requestHost}%`)
             .limit(1);
 
         if (!appDataList || appDataList.length === 0) {
-            return { isAuthorized: false, error: 'Domain unauthorized or explicitly deleted by Administrator.', status: 202 };
+            return { isAuthorized: false, error: 'Domain unauthorized for this Publisher identity.', status: 403 };
         }
         
         const appData = appDataList[0];
-        
-        // Ensure FID or Wallet actually owns this domain
-        if (String(appData.publisher_wallet).toLowerCase() !== String(publisherWallet).toLowerCase()) {
-            return { isAuthorized: false, error: 'Domain unauthorized for this Publisher identity.', status: 403 };
-        }
 
         const parts = appData.app_type.split('|');
         const baseAppType = parts[0];

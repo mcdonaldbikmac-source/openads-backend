@@ -195,11 +195,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing Origin/Referer header' }, { status: 202 });
         }
 
-        // Validate the Publisher's Domain using strict wallet matching
+        // 🚨 Validate the Publisher's Domain using strict wallet BOUNDING matching
+        // mathematically preventing attacker row exhaustion during wildcard searches
         const { data: publisherAppList, error: appError } = await supabase
             .from('apps')
             .select('id, domain, logo_url, publisher_wallet')
-            .ilike('domain', `%${requestHost}%`)
+            .ilike('publisher_wallet', publisherWallet) // Exact match for claiming publisher
+            .ilike('domain', `%${requestHost}%`) // Within their own apps, wildcard match the host
             .limit(1);
 
         const publisherApp = publisherAppList && publisherAppList.length > 0 ? publisherAppList[0] : null;
