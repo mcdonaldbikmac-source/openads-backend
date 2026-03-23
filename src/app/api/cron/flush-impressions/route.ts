@@ -28,6 +28,14 @@ export async function GET(request: Request) {
         const batchData = await redis.hgetall(processingKey);
         if (!batchData) return NextResponse.json({ status: 'Empty processing matrix' }, { status: 200 });
 
+        // Pre-fetch CPM rates to accurately calculate the Redis Spend deflation
+        const uniqueAdIds = Array.from(new Set(Object.keys(batchData).map(k => k.split('::')[0])));
+        const { data: cpmData } = await supabase.from('campaigns').select('id, cpm_rate_wei').in('id', uniqueAdIds);
+        const cpmMap = new Map();
+        if (cpmData) {
+            cpmData.forEach(c => cpmMap.set(String(c.id), BigInt(c.cpm_rate_wei || 0)));
+        }
+
         // Sequential Flush to bypass the 10,000 parallel Postgres Row-Level Lock crash vector
         // Execute sequentially to absolutely ensure Vercel does not exhaust the PgBouncer pool.
         let totalFlushed = 0;
@@ -37,6 +45,8 @@ export async function GET(request: Request) {
             if (views <= 0) continue;
             
             const [adId, publisherWallet] = key.split('::');
+            const cpmWei = cpmMap.get(adId) || BigInt(0);
+            let successfulViews = 0;
 
             for (let i = 0; i < views; i++) {
                 // Execute sequentially to limit maximum DB connections to 1
@@ -48,7 +58,24 @@ export async function GET(request: Request) {
                     p_sig: null
                 });
                 
-                if (!error) totalFlushed++;
+                if (!error) {
+                    totalFlushed++;
+                    successfulViews++;
+                }
+            }
+
+            // =========================================================================
+            // SECURITY UPDATE: Prevent Redis Overdraft Sandbox Leak (Double-Counting)
+            // Atomically subtract the natively flushed Postgres volume from the volatile Redis ledger
+            // so that Dashboards and Ad Engines do not double count spent funds.
+            // =========================================================================
+            if (successfulViews > 0 && cpmWei > BigInt(0)) {
+                try {
+                    const costToDeduct = Number((cpmWei * BigInt(successfulViews)) / BigInt(1000));
+                    await redis.decrby(`rt_spend_${adId}`, costToDeduct);
+                } catch (e) {
+                    console.warn(`[Security] Failed to de-allocate Redis memory leak for Ad ${adId}`, e);
+                }
             }
         }
 

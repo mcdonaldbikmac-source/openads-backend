@@ -145,6 +145,51 @@ export async function GET(request: Request) {
             .eq('event_type', 'view')
             .gte('created_at', yesterday.toISOString());
 
+        // =========================================================================
+        // FEATURE: 100% Real-Time Publisher Dashboard Fusion
+        // Bypass the Vercel 24-hour Cron restriction by dynamically calculating real-time earnings 
+        // entirely from the Upstash Redis volatile ledger to ensure 0-millisecond lag.
+        // =========================================================================
+        let redisRealtimeViews = 0;
+        let redisRealtimeEarningsWei = BigInt(0);
+        let redisLastActiveAt: string | null = null;
+
+        try {
+            const { Redis } = require('@upstash/redis');
+            const redisClient = Redis.fromEnv();
+            const pendingViews = await redisClient.hgetall('cron_pending_views');
+            
+            if (pendingViews) {
+                const recentAdIds = [];
+                for (const [key, val] of Object.entries(pendingViews)) {
+                    const [adId, pubWallet] = key.split('::');
+                    if (pubWallet.toLowerCase() === wallet.toLowerCase()) {
+                        redisRealtimeViews += Number(val as string);
+                        recentAdIds.push(adId);
+                        redisLastActiveAt = new Date().toISOString();
+                    }
+                }
+                
+                if (recentAdIds.length > 0) {
+                    const { data: cpmData } = await supabase.from('campaigns').select('id, cpm_rate_wei').in('id', recentAdIds);
+                    if (cpmData) {
+                        const cpmMap = new Map();
+                        cpmData.forEach(c => cpmMap.set(String(c.id), BigInt(c.cpm_rate_wei || 0)));
+                        
+                        for (const [key, val] of Object.entries(pendingViews)) {
+                            const [adId, pubWallet] = key.split('::');
+                            if (pubWallet.toLowerCase() === wallet.toLowerCase()) {
+                                const views = Number(val as string);
+                                const cpm = cpmMap.get(adId) || BigInt(0);
+                                const earningsShare = (cpm * BigInt(views)) / BigInt(1000);
+                                redisRealtimeEarningsWei += earningsShare;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch(e) { console.warn("[Security] Publisher Dashboard Redis Fusion offline.", e); }
+
         // 4. Calculate distinct ledger tracks (Ad Revenue vs Syndicate Revenue) using the Vouchers Table as a proxy ledger
         const { data: syndPayouts } = await supabase
             .from('vouchers')
@@ -156,23 +201,28 @@ export async function GET(request: Request) {
         let syndicatePaidOutWei = BigInt(0);
         if (syndPayouts) {
             for (let v of syndPayouts) {
-                // Convert USD float back to strict Wei
                 syndicatePaidOutWei += BigInt(Math.round(v.amount_usd * 1000000));
             }
         }
 
-        const adEarnedWei = totalEarnedWei - syndicateEarnedWei;
+        const adEarnedWei = totalEarnedWei - syndicateEarnedWei + redisRealtimeEarningsWei;
         const adPaidOutWei = paidOutWei - syndicatePaidOutWei;
 
         const pendingAdWei = adEarnedWei - adPaidOutWei;
         const pendingSyndWei = syndicateEarnedWei - syndicatePaidOutWei;
 
+        const finalTotalEarnedWei = totalEarnedWei + redisRealtimeEarningsWei;
+
         // Mathematically derive Today's fraction strictly based on aggregate Lifetime ECPM performance
-        // Prevents the requirement of a catastrophic DB Schema migration while fulfilling the 'Today vs Lifetime' separation directive
         let todayEarnedWei = BigInt(0);
         if (viewCount && viewCount > 0) {
-            const weiPerView = adEarnedWei / BigInt(viewCount);
-            todayEarnedWei = weiPerView * BigInt(todayViewCount || 0);
+            // Deduct the realtime injected portion to calculate base history
+            const baseHistoryEarned = adEarnedWei - redisRealtimeEarningsWei;
+            const weiPerView = baseHistoryEarned / BigInt(viewCount);
+            todayEarnedWei = (weiPerView * BigInt(todayViewCount || 0)) + redisRealtimeEarningsWei;
+        } else if (redisRealtimeEarningsWei > BigInt(0)) {
+            // Edge case: first day of a Miniapp, no Postgres history yet
+            todayEarnedWei = redisRealtimeEarningsWei;
         }
 
         // Convert bigints to readable USD formatting for the frontend UI
@@ -181,15 +231,15 @@ export async function GET(request: Request) {
                 success: true,
                 stats: {
                     todayEarnedUSD: Number(ethers.formatUnits(todayEarnedWei.toString(), 6)).toFixed(4),
-                    totalEarnedUSD: Number(ethers.formatUnits(totalEarnedWei.toString(), 6)).toFixed(4),
+                    totalEarnedUSD: Number(ethers.formatUnits(finalTotalEarnedWei.toString(), 6)).toFixed(4),
                     pendingUSD: Number(ethers.formatUnits(pendingAdWei.toString(), 6)).toFixed(4), // Base Ad Revenue Claimable
                     pendingSyndicateUSD: Number(ethers.formatUnits(pendingSyndWei.toString(), 6)).toFixed(4), // Syndicate Revenue Claimable
                     paidOutUSD: Number(ethers.formatUnits(paidOutWei.toString(), 6)).toFixed(4),
                     syndicateEarnedUSD: Number(ethers.formatUnits(syndicateEarnedWei.toString(), 6)).toFixed(4), // All Time Protocol Earnings
-                    impressions: viewCount || 0,
-                    todayImpressions: todayViewCount || 0,
+                    impressions: (viewCount || 0) + redisRealtimeViews,
+                    todayImpressions: (todayViewCount || 0) + redisRealtimeViews,
                     clicks: clickCount || 0,
-                    lastImpression: viewData && viewData.length > 0 ? viewData[0].created_at : null,
+                    lastImpression: redisLastActiveAt || (viewData && viewData.length > 0 ? viewData[0].created_at : null),
                     lastClick: clickData && clickData.length > 0 ? clickData[0].created_at : null
                 }
             },

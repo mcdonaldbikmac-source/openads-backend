@@ -89,6 +89,19 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Database error fetching campaigns' }, { status: 500 });
         }
 
+        // =========================================================================
+        // FEATURE: 100% Real-Time Advertiser Dashboard Fusion
+        // Bypass the Vercel 24-hour Cron restriction by dynamically mapping the Upstash Redis 
+        // real-time buffer `rt_spend` and `cron_pending_views` onto the Postgres response.
+        // =========================================================================
+        let redisClient: any = null;
+        let redisPendingViews: Record<string, string> | null = null;
+        try {
+            const { Redis } = require('@upstash/redis');
+            redisClient = Redis.fromEnv();
+            redisPendingViews = await redisClient.hgetall('cron_pending_views');
+        } catch(e) { console.warn("[Security] Advertiser Dashboard Redis Fusion offline. Falling back to Postgres only.", e); }
+
         // Format BigInts to Strings for the frontend and stitch in real tracking counts
         const formattedCampaigns = await Promise.all(campaigns.map(async (camp) => {
             // Count actual Clicks from tracking_events (clicks column does not exist on campaigns table)
@@ -98,14 +111,32 @@ export async function GET(request: Request) {
                 .eq('campaign_id', camp.id)
                 .eq('event_type', 'click');
 
-            // Optionally, also count Views natively just to ensure 100% accuracy if RPC failed
+            // Fetch live Postgres Views
             const { count: viewsCount } = await supabase
                 .from('tracking_events')
                 .select('*', { count: 'exact', head: true })
                 .eq('campaign_id', camp.id)
                 .eq('event_type', 'view');
+                
+            // Fuse Real-Time Views from Redis Unflushed Buffer
+            let realtimeViews = 0;
+            if (redisPendingViews) {
+                for (const [key, val] of Object.entries(redisPendingViews)) {
+                    if (key.startsWith(`${camp.id}::`)) realtimeViews += Number(val);
+                }
+            }
 
-            const finalImpressions = viewsCount || camp.impressions || 0;
+            // Fuse Real-Time Volatile Spend from Redis Ad Engine Tracker
+            let realtimeSpendWei = BigInt(0);
+            if (redisClient) {
+                try {
+                    const rs = await redisClient.get(`rt_spend_${camp.id}`);
+                    if (rs) realtimeSpendWei = BigInt(rs);
+                } catch(e) {}
+            }
+
+            const dbImpressions = viewsCount || camp.impressions || 0;
+            const finalImpressions = dbImpressions + realtimeViews;
             const finalClicks = clicksCount || 0;
 
             let displayUrl = camp.creative_url || '';
@@ -121,6 +152,9 @@ export async function GET(request: Request) {
                 txHash = parts[1];
             }
 
+            const totalSpendWei = BigInt(String(camp.spend_wei || '0').split('.')[0]) + realtimeSpendWei;
+            const spendUsd = Number(ethers.formatUnits(totalSpendWei.toString(), 6)).toFixed(4);
+
             return {
                 id: camp.id,
                 headline: camp.creative_title,
@@ -132,7 +166,7 @@ export async function GET(request: Request) {
                 clicks: finalClicks,
                 status: camp.status,
                 budget_usd: Number(ethers.formatUnits(String(camp.budget_wei || '0').split('.')[0], 6)).toFixed(2),
-                spend_usd: Number(ethers.formatUnits(String(camp.spend_wei || '0').split('.')[0], 6)).toFixed(4),
+                spend_usd: spendUsd,
                 cpm_usd: Number(ethers.formatUnits(String(camp.cpm_rate_wei || '0').split('.')[0], 6)).toFixed(2),
                 created_at: camp.created_at,
                 updated_at: camp.updated_at

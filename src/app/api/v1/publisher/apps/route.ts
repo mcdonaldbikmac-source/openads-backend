@@ -93,7 +93,26 @@ export async function GET(request: Request) {
             .order('created_at', { ascending: false })
             .limit(1);
 
-        const lastActiveAt = latestImp && latestImp.length > 0 ? latestImp[0].created_at : null;
+        let lastActiveAt = latestImp && latestImp.length > 0 ? latestImp[0].created_at : null;
+
+        // =========================================================================
+        // FEATURE: Real-Time Developer Handshake Feedback
+        // Query Redis to instantly mark the Publisher Dashboard as 'Active' even before the midnight Cron sync.
+        // =========================================================================
+        try {
+            const { Redis } = require('@upstash/redis');
+            const redisClient = Redis.fromEnv();
+            const pendingViews = await redisClient.hgetall('cron_pending_views');
+            if (pendingViews) {
+                for (const key of Object.keys(pendingViews)) {
+                    const pubWallet = key.split('::')[1];
+                    if (pubWallet && pubWallet.toLowerCase() === wallet.toLowerCase()) {
+                        lastActiveAt = new Date().toISOString();
+                        break;
+                    }
+                }
+            }
+        } catch(e) {}
 
         return NextResponse.json(
             { success: true, apps: apps || [], last_active_at: lastActiveAt },
