@@ -9,7 +9,8 @@ export async function GET() {
         const { data, error } = await supabase
             .from('campaigns')
             .select('ad_type, impressions, spend_wei')
-            .eq('status', 'active');
+            .eq('status', 'active')
+            .eq('is_test', false);
 
         if (error) throw error;
 

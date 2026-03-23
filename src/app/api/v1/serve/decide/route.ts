@@ -98,7 +98,7 @@ export async function GET(request: Request) {
         if (!campaigns || nowTs - lastCampaignCacheTime > 15000) {
             const { data: dbCampaigns, error } = await supabase
                 .from('campaigns')
-                .select('id, status, ad_type, scheduled_start, budget_wei, spend_wei, cpm_rate_wei, creative_title, creative_url')
+                .select('id, status, ad_type, scheduled_start, budget_wei, spend_wei, cpm_rate_wei, creative_title, creative_url, is_test')
                 .eq('status', 'active');
 
             if (error) {
@@ -114,8 +114,28 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'No active campaigns available' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
         }
 
+        // ==========================================
+        // SECURITY: Origin Sandboxing (Financial Firewall)
+        // Completely isolate the Campaign Auction Pool. Local dev environments must ONLY receive mock test ads.
+        // ==========================================
+        const sandboxRequired = requestHost.includes('localhost') || requestHost.includes('127.0.0.1') || requestHost.includes('.local');
+        
+        let auctionPool = campaigns;
+        if (sandboxRequired) {
+            auctionPool = campaigns.filter(c => c.is_test === true);
+            if (auctionPool.length === 0) {
+                console.warn(`[Sandbox] Localhost origin detected but no System-Seeded Mock Ads exist in the Database.`);
+            }
+        } else {
+            auctionPool = campaigns.filter(c => c.is_test !== true);
+        }
+
+        if (auctionPool.length === 0) {
+            return NextResponse.json({ error: 'No active campaigns available in this environment' }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', 'Access-Control-Allow-Origin': '*' } });
+        }
+
         // 1.5 Filter by explicit placement dimensions AND position to prevent Auction Hijacking
-        const filteredByPosition = campaigns.filter(camp => {
+        const filteredByPosition = auctionPool.filter(camp => {
             const types = camp.ad_type || '';
             
             // Map abstract semantic Placements to concrete Geometry Dimensions

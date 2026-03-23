@@ -185,6 +185,7 @@ export async function POST(request: Request) {
         }
         let requestHost = '';
         try { requestHost = new URL(originHeader as string).host; } catch(e) {}
+        const isSandboxMode = requestHost.includes('localhost') || requestHost.includes('127.0.0.1') || requestHost.includes('.local');
 
         if (!requestHost) {
             console.warn(`[Security] Blocked tracking ping with no Origin/Referer/Parent header: ${ip}`);
@@ -279,10 +280,22 @@ export async function POST(request: Request) {
         // =========================================================================
         
         if (normalizedEvent === 'view') {
-            // ===============================================
-            // 🚨 SECURITY FIX: Redis In-Memory Write Batching
-            // Bypasses the PostgreSQL Row-Level Lock crash vector completely.
-            // ===============================================
+            if (isSandboxMode) {
+                // Completely bypass the production Redis memory batching for Sandboxed environments.
+                const { error } = await supabase.from('tracking_events').insert([{
+                    campaign_id: ad.id,
+                    publisher_wallet: publisherApp.publisher_wallet,
+                    fid: client_type === 'web' ? 0 : Number(fid),
+                    event_type: normalizedEvent,
+                    sig: client_type === 'web' ? null : sig,
+                    is_test: true
+                }]);
+                if (error) console.error('Supabase Sandbox View Log Error:', error);
+            } else {
+                // ===============================================
+                // 🚨 SECURITY FIX: Redis In-Memory Write Batching
+                // Bypasses the PostgreSQL Row-Level Lock crash vector completely.
+                // ===============================================
             try {
                 const redis = Redis.fromEnv();
                 // Map the Ad ID to the precise Publisher Wallet for the Cron flush mapping
@@ -310,6 +323,7 @@ export async function POST(request: Request) {
                 });
                 if (error) console.error('Supabase RPC Fallback Error:', error.message || error);
             }
+        } // Close else block
         }
         else if (normalizedEvent === 'click') {
             // For production, clicks log for CTR computation
@@ -321,7 +335,8 @@ export async function POST(request: Request) {
                 publisher_wallet: publisherApp.publisher_wallet,
                 fid: safeFid,
                 event_type: normalizedEvent,
-                sig: safeSig
+                sig: safeSig,
+                is_test: isSandboxMode
             }]);
 
             if (error) console.error('Supabase Click Log Error:', error.message || error);
@@ -336,7 +351,8 @@ export async function POST(request: Request) {
                 publisher_wallet: publisherApp.publisher_wallet,
                 fid: safeFid,
                 event_type: 'connect',
-                sig: safeSig
+                sig: safeSig,
+                is_test: isSandboxMode
             }]);
 
             if (error) console.error('Supabase Connect Log Error:', error.message || error);

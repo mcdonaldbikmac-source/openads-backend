@@ -106,13 +106,15 @@ export async function GET(request: Request) {
             .from('tracking_events')
             .select('*', { count: 'exact', head: true })
             .eq('publisher_wallet', wallet)
-            .eq('event_type', 'view');
+            .eq('event_type', 'view')
+            .eq('is_test', false);
 
         const { count: clickCount } = await supabase
             .from('tracking_events')
             .select('*', { count: 'exact', head: true })
             .eq('publisher_wallet', wallet)
-            .eq('event_type', 'click');
+            .eq('event_type', 'click')
+            .eq('is_test', false);
 
         if (viewError) {
             console.error('Supabase fetch views error:', viewError);
@@ -124,6 +126,7 @@ export async function GET(request: Request) {
             .select('created_at')
             .eq('publisher_wallet', wallet)
             .eq('event_type', 'view')
+            .eq('is_test', false)
             .order('created_at', { ascending: false })
             .limit(1);
             
@@ -132,6 +135,7 @@ export async function GET(request: Request) {
             .select('created_at')
             .eq('publisher_wallet', wallet)
             .eq('event_type', 'click')
+            .eq('is_test', false)
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -143,6 +147,7 @@ export async function GET(request: Request) {
             .select('*', { count: 'exact', head: true })
             .eq('publisher_wallet', wallet)
             .eq('event_type', 'view')
+            .eq('is_test', false)
             .gte('created_at', yesterday.toISOString());
 
         // =========================================================================

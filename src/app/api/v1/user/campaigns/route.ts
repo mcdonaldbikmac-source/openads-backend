@@ -96,6 +96,7 @@ export async function GET(request: Request) {
             .from('campaigns')
             .select('*')
             .or(orQuery)
+            .eq('is_test', false)
             .order('created_at', { ascending: false });
 
         if (error) {
