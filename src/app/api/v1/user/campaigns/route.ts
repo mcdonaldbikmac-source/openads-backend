@@ -86,10 +86,16 @@ export async function GET(request: Request) {
         // Fetch user's campaigns
         // 1. Support legacy standalone Web3 wallet strings.
         // 2. Support new Zero-Migration Dual-Identity strings `|0xABC|Hunt16z|` securely using bounded wildcards.
+        // 3. (NEW) Support Farcaster custody addresses for older campaigns created before strictly using FIDs.
+        let orQuery = `advertiser_wallet.ilike.${wallet},advertiser_wallet.ilike.%|${wallet}|%`;
+        if (address) {
+            orQuery += `,advertiser_wallet.ilike.${address},advertiser_wallet.ilike.%|${address}|%`;
+        }
+        
         const { data: campaigns, error } = await supabase
             .from('campaigns')
             .select('*')
-            .or(`advertiser_wallet.ilike.${wallet},advertiser_wallet.ilike.%|${wallet}|%`)
+            .or(orQuery)
             .order('created_at', { ascending: false });
 
         if (error) {
