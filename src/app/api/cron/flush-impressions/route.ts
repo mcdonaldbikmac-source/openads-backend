@@ -68,11 +68,16 @@ export async function GET(request: Request) {
             // SECURITY UPDATE: Prevent Redis Overdraft Sandbox Leak (Double-Counting)
             // Atomically subtract the natively flushed Postgres volume from the volatile Redis ledger
             // so that Dashboards and Ad Engines do not double count spent funds.
+            // PRO-TIER FIX: Mathematically clamp the floor to 0 to prevent artificial budget regeneration.
             // =========================================================================
             if (successfulViews > 0 && cpmWei > BigInt(0)) {
                 try {
                     const costToDeduct = Number((cpmWei * BigInt(successfulViews)) / BigInt(1000));
-                    await redis.decrby(`rt_spend_${adId}`, costToDeduct);
+                    const currentSpend = Number(await redis.get(`rt_spend_${adId}`) || 0);
+                    if (currentSpend > 0) {
+                        const newSpend = Math.max(0, currentSpend - costToDeduct);
+                        await redis.set(`rt_spend_${adId}`, newSpend);
+                    }
                 } catch (e) {
                     console.warn(`[Security] Failed to de-allocate Redis memory leak for Ad ${adId}`, e);
                 }
