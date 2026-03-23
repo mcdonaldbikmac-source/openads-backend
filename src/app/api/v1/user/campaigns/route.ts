@@ -3,6 +3,8 @@ import { supabase } from '@/app/lib/supabase';
 import { ethers } from 'ethers';
 import { createAppClient, viemConnector } from '@farcaster/auth-client';
 
+export const dynamic = 'force-dynamic';
+
 const appClient = createAppClient({
     ethereum: viemConnector(),
 });
@@ -44,7 +46,7 @@ export async function GET(request: Request) {
         }
 
         if (provider === 'farcaster') {
-            if (!nonce) return NextResponse.json({ error: 'Farcaster SIWF missing nonce.' }, { status: 401 });
+            if (!nonce) return NextResponse.json({ error: 'DEBUG_TRACE: Farcaster SIWF missing nonce.' }, { status: 401 });
             try {
                 const domainMatch = message?.match(/(.+) wants you to sign in/);
                 const extractedDomain = domainMatch ? domainMatch[1] : 'openads-backend.vercel.app';
@@ -56,10 +58,16 @@ export async function GET(request: Request) {
                     nonce: nonce,
                 });
                 if (!result.success || result.fid.toString() !== String(fid)) {
-                    return NextResponse.json({ error: 'Farcaster Cryptographic Signature Invalid.' }, { status: 401 });
+                    return NextResponse.json({ 
+                        error: 'DEBUG_TRACE: FC_SIG_INVALID', 
+                        details: `Success: ${result.success}, ExpectedFID: ${fid}, ReceivedFID: ${result.fid || 'N/A'}, Domain: ${extractedDomain}` 
+                    }, { status: 401 });
                 }
-            } catch (err) {
-                return NextResponse.json({ error: 'Farcaster Authentication Exception.' }, { status: 401 });
+            } catch (vErr: any) {
+                return NextResponse.json({ 
+                    error: 'DEBUG_TRACE: ENGINE_FAIL', 
+                    message: String(vErr.message || vErr) 
+                }, { status: 500 });
             }
         } else {
             try {
