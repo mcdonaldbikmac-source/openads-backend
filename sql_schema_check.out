@@ -1,0 +1,11 @@
+[dotenv@17.3.1] injecting env (7) from .env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+Vouchers: [ 'code', 'amount', 'is_used', 'used_by_wallet', 'created_at' ]
+TrackingEvents: [
+  'id',
+  'campaign_id',
+  'publisher_wallet',
+  'fid',
+  'event_type',
+  'sig',
+  'created_at'
+]

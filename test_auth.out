@@ -1,0 +1,15 @@
+[dotenv@17.3.1] injecting env (7) from .env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+Resolved advWallet param: 12345
+Resolved X-OpenAds-Auth format valid Base64?: true
+Fetching: http://localhost:3000/api/v1/user/campaigns?wallet=12345
+Fetch failed: TypeError: fetch is not a function
+    at testAuth (/Users/jang-ujin/.openclaw/workspace/openads-backend/test_farcaster_auth.js:47:27)
+    at Object.<anonymous> (/Users/jang-ujin/.openclaw/workspace/openads-backend/test_farcaster_auth.js:58:1)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Module._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49

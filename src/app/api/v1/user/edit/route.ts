@@ -62,10 +62,18 @@ export async function POST(request: Request) {
 
         const authWallet = campaignAuth.advertiser_wallet.toLowerCase();
         const signerLower = signer_wallet.toLowerCase();
+        const { address, custody } = body;
+        const addrLower = address ? address.toLowerCase() : null;
+        const custLower = custody ? custody.toLowerCase() : null;
 
+        let authorized = false;
         // Security: Support legacy standalone string AND dual-identity pipe formats (`|0x...|Hunt16z|`)
         // The pipe wrappers `|signerLower|` completely eliminate partial-match IDOR vulnerabilities.
-        if (authWallet !== signerLower && !authWallet.includes(`|${signerLower}|`)) {
+        if (authWallet === signerLower || authWallet.includes(`|${signerLower}|`)) authorized = true;
+        if (!authorized && addrLower && (authWallet === addrLower || authWallet.includes(`|${addrLower}|`))) authorized = true;
+        if (!authorized && custLower && (authWallet === custLower || authWallet.includes(`|${custLower}|`))) authorized = true;
+
+        if (!authorized) {
             console.warn(`[Security] IDOR attempt blocked! Wallet ${signer_wallet} tried to edit campaign owned by ${campaignAuth.advertiser_wallet}`);
             return NextResponse.json({ error: 'Unauthorized. You do not own this campaign.' }, { status: 403 });
         }

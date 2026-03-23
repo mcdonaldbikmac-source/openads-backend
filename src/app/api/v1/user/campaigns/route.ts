@@ -33,7 +33,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized: Malformed authentication header.' }, { status: 401 });
         }
 
-        const { signature, message, nonce, provider, address, fid } = authObj;
+        const { signature, message, nonce, provider, address, fid, custody } = authObj;
         const signer_wallet = provider === 'farcaster' ? String(fid) : (address || String(fid));
 
         if (!signature || !signer_wallet) {
@@ -90,6 +90,9 @@ export async function GET(request: Request) {
         let orQuery = `advertiser_wallet.ilike.${wallet},advertiser_wallet.ilike.%|${wallet}|%`;
         if (address) {
             orQuery += `,advertiser_wallet.ilike.${address},advertiser_wallet.ilike.%|${address}|%`;
+        }
+        if (custody && custody !== address) {
+            orQuery += `,advertiser_wallet.ilike.${custody},advertiser_wallet.ilike.%|${custody}|%`;
         }
         
         const { data: campaigns, error } = await supabase

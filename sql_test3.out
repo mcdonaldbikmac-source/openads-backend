@@ -1,0 +1,8 @@
+[dotenv@17.3.1] injecting env (7) from .env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[
+  {
+    name: 'Piggy Bank',
+    logo_url: 'https://piggy-bank-cbbtc.vercel.app/og-piggy-viral.png'
+  },
+  { name: 'Zombie', logo_url: null }
+]

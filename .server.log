@@ -1,0 +1,32 @@
+
+> openads-backend@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://172.30.1.90:3000
+- Environments: .env.development.local, .env.local
+
+✓ Starting...
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+✓ Ready in 609ms
+No `rpcUrl` provided to Viem connector, using public endpoint. Do not use this in production
+[Security] Read API Web3 SIWE Failed: TypeError: invalid BytesLike value (argument="signature", value="test_mock_signature", code=INVALID_ARGUMENT, version=6.16.0)
+    at GET (src/app/api/v1/user/campaigns/route.ts:67:49)
+  65 |             try {
+  66 |                 const expectedMessage = message || 'Sign to login to OpenAds Network';
+> 67 |                 const recoveredAddress = ethers.verifyMessage(expectedMessage, signature);
+     |                                                 ^
+  68 |                 if (recoveredAddress.toLowerCase() !== signer_wallet.toLowerCase()) {
+  69 |                     throw new Error("Signature mismatch");
+  70 |                 } {
+  code: 'INVALID_ARGUMENT',
+  argument: 'signature',
+  value: 'test_mock_signature',
+  shortMessage: 'invalid BytesLike value'
+}
+ GET /api/v1/user/campaigns?wallet=0xTestAdvertiserXYZ123 401 in 1157ms (compile: 985ms, proxy.ts: 76ms, render: 96ms)
+ GET /api/v1/user/campaigns?wallet=0x19564E1CE3d865e610b3220E46b69A1b37A74b2d 200 in 990ms (compile: 7ms, proxy.ts: 8ms, render: 975ms)
+No `rpcUrl` provided to Viem connector, using public endpoint. Do not use this in production
+ GET /api/v1/publisher/stats?wallet=0xe3b9346214E19752F0De6A08786f124bE5689cCF 200 in 2.3s (compile: 141ms, proxy.ts: 4ms, render: 2.2s)
+ GET /api/cron/flush-impressions 200 in 20.4s (compile: 104ms, proxy.ts: 4ms, render: 20.3s)
