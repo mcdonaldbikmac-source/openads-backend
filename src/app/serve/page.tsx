@@ -26,7 +26,7 @@ function AdFrameContent() {
 
         async function fetchAd() {
             try {
-                const parentUrl = document.referrer || window.location.href;
+                const parentUrl = document.referrer || '';
                 const encodedParent = encodeURIComponent(parentUrl);
                 const res = await fetch(`/api/v1/serve/decide?placement=${placementId}&position=${position}&parent_url=${encodedParent}&t=${Date.now()}`);
                 if (!res.ok) throw new Error('API unreachable');
@@ -90,7 +90,7 @@ function AdFrameContent() {
                                     logo: searchParams.get('logo') || '',
                                     sig: serveToken || '',
                                     message: `impression:${placementId}:${publisherWallet}`,
-                                    parent_url: document.referrer || window.location.href
+                                    parent_url: document.referrer || ''
                                 })
                             }).catch(console.error);
                             
@@ -189,6 +189,8 @@ function AdFrameContent() {
                     alt="" 
                     onError={(e) => {
                         e.currentTarget.style.display = 'none';
+                        if (containerRef.current) containerRef.current.style.display = 'none';
+                        window.parent.postMessage({ type: 'OPENADS_COLLAPSE' }, '*');
                     }}
                     onLoad={(e) => {
                         const imgElement = e.currentTarget;

@@ -133,21 +133,15 @@ export async function POST(request: Request) {
              return NextResponse.json({ error: 'Transaction has already been used. Double-Spend Blocked.' }, { status: 403 });
         }
 
-        // Add dynamically extracted mathematical amount to budget_wei
-        const currentBudgetWei = BigInt(String(campaign.budget_wei || '0').split('.')[0]);
-        const newBudgetWei = currentBudgetWei + amountWeiFromBlockchain;
-
-        const updatePayload: any = { budget_wei: newBudgetWei.toString() };
-        
-        // Auto resume if it was paused
-        if (campaign.status === 'paused' || campaign.status === 'completed') {
-            updatePayload.status = 'active';
-        }
-
-        const { error: updateErr } = await supabase
-            .from('campaigns')
-            .update(updatePayload)
-            .eq('id', campaign_id);
+        // -------------------------------------------------------------------------
+        // SECURITY UPDATE: Atomic Budget Replenishment
+        // Delegate floating point math strictly to the Database Engine via RPC to
+        // eliminate Read-Modify-Write race conditions from overlapping blockchain Webhook pings.
+        // -------------------------------------------------------------------------
+        const { error: updateErr } = await supabase.rpc('atomic_add_budget', {
+             p_campaign_id: campaign_id,
+             p_added_wei: amountWeiFromBlockchain.toString()
+        });
 
         if (updateErr) {
             console.error('Failed to update campaign budget:', updateErr);
@@ -170,13 +164,3 @@ export async function POST(request: Request) {
     }
 }
 
-export async function OPTIONS() {
-    return new NextResponse(null, {
-        status: 204,
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma, Expires',
-        },
-    });
-}

@@ -62,12 +62,3 @@ export async function GET() {
     }
 }
 
-export async function OPTIONS() {
-    return new NextResponse(null, {
-        status: 204,
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        },
-    });
-}

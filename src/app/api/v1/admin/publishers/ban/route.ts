@@ -39,13 +39,3 @@ export async function DELETE(req: Request) {
     }
 }
 
-export async function OPTIONS() {
-    return new NextResponse(null, {
-        status: 204,
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'OPTIONS, DELETE',
-            'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma, Expires',
-        },
-    });
-}

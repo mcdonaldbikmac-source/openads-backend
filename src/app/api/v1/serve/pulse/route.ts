@@ -176,15 +176,18 @@ export async function POST(request: Request) {
 
         // =========================================================================
         // SECURITY UPDATE: Strict Domain Authentication mapped to Publisher Wallet
-        // We use payload.parent_url sent from the iframe to resolve the true domain.
+        // We natively use payload.parent_url sent from the iframe to resolve the true domain.
         // =========================================================================
-        let originHeader = request.headers.get('origin') || request.headers.get('referer');
-        if (!originHeader) {
-            originHeader = payload.parent_url || '';
-            console.warn(`[Security] Missing strict Origin/Referer in /pulse. Falling back to payload: ${originHeader}`);
-        }
+        const clientReportedParent = payload.parent_url || '';
         let requestHost = '';
-        try { requestHost = new URL(originHeader as string).host; } catch(e) {}
+        try { 
+            if (clientReportedParent) {
+                requestHost = new URL(clientReportedParent).host; 
+            }
+        } catch(e) {
+            console.warn(`[Security] Failed to parse parent_url: ${clientReportedParent}`);
+        }
+        
         const isSandboxMode = requestHost.includes('localhost') || requestHost.includes('127.0.0.1') || requestHost.includes('.local');
 
         if (!requestHost) {
@@ -193,12 +196,13 @@ export async function POST(request: Request) {
         }
 
         // Validate the Publisher's Domain using strict wallet matching
-        const { data: publisherApp, error: appError } = await supabase
+        const { data: publisherAppList, error: appError } = await supabase
             .from('apps')
             .select('id, domain, logo_url, publisher_wallet')
-            .ilike('publisher_wallet', publisherWallet)
             .ilike('domain', `%${requestHost}%`)
-            .single();
+            .limit(1);
+
+        const publisherApp = publisherAppList && publisherAppList.length > 0 ? publisherAppList[0] : null;
 
         if (appError || !publisherApp) {
             if (requestHost.includes('openads-backend')) {
@@ -390,13 +394,3 @@ export async function POST(request: Request) {
     }
 }
 
-export async function OPTIONS() {
-    return new NextResponse(null, {
-        status: 204,
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma, Expires',
-        },
-    });
-}

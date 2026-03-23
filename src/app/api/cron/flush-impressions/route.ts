@@ -28,8 +28,13 @@ export async function GET(request: Request) {
         const batchData = await redis.hgetall(processingKey);
         if (!batchData) return NextResponse.json({ status: 'Empty processing matrix' }, { status: 200 });
 
-        // Pre-fetch CPM rates to accurately calculate the Redis Spend deflation
         const uniqueAdIds = Array.from(new Set(Object.keys(batchData).map(k => k.split('::')[0])));
+        
+        if (uniqueAdIds.length === 0) {
+            await redis.del(processingKey);
+            return NextResponse.json({ status: 'Empty processing matrix keys' }, { status: 200 });
+        }
+
         const { data: cpmData } = await supabase.from('campaigns').select('id, cpm_rate_wei').in('id', uniqueAdIds);
         const cpmMap = new Map();
         if (cpmData) {
